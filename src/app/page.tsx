@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 
 export const dynamic = 'force-dynamic';
-export default async function DashboardPage({ searchParams }: { searchParams: { year?: string, month?: string } }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ year?: string; month?: string }> }) {
   const resolvedSearchParams = await searchParams;
   const year = resolvedSearchParams.year ? parseInt(resolvedSearchParams.year, 10) : undefined;
   const month = resolvedSearchParams.month ? parseInt(resolvedSearchParams.month, 10) : undefined;
