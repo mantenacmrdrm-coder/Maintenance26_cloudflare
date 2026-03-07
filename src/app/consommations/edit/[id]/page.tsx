@@ -5,7 +5,7 @@ import { EditConsumptionForm } from "./edit-consumption-form";
 
 export const dynamic = 'force-dynamic';
 export default async function EditConsumptionPage({ params }: { params: Promise<{ id: string }> }) {
-    const consumptionId = parseInt((await params).id, 10);
+    const consumptionId = parseInt(params.id, 10);
     if (isNaN(consumptionId)) {
         notFound();
     }

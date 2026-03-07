@@ -15,7 +15,7 @@ import customParseFormat from 'dayjs/plugin/customParseFormat';
 dayjs.extend(customParseFormat);
 
 type Props = {
-  params: { matricule: string };
+  params: Promise<{ matricule: string }>;
 };
 
 export default async function EquipmentDetailPage({ params }: Props) {
