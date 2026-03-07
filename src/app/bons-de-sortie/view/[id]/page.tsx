@@ -4,7 +4,7 @@ import { BonDeSortieView } from "./bon-view";
 
 
 export const dynamic = 'force-dynamic';
-export default async function ViewBonPage({ params }: { params: Promise<{ id: string } }) {
+export default async function ViewBonPage({ params }: { params: { id: string } }) {
     const resolvedParams = await params;
     const bonId = parseInt(resolvedParams.id, 10);
     if (isNaN(bonId)) {
