@@ -5,7 +5,7 @@ import type { Equipment } from "@/lib/types";
 
 
 export const dynamic = 'force-dynamic';
-export default async function EditEquipmentPage({ params }: { params: Promise<{ id: string } }) {
+export default async function EditEquipmentPage({ params }: { params: Promise<{ id: string }> }) {
     const resolvedParams = await params;
     const equipmentId = parseInt(resolvedParams.id, 10);
     if (isNaN(equipmentId)) {
