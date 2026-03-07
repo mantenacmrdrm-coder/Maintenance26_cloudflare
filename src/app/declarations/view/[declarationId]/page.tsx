@@ -2,8 +2,8 @@ import { getDeclaration } from "@/lib/actions/maintenance-actions";
 import { notFound } from "next/navigation";
 import { DeclarationView } from "./view";
 
-
 export const dynamic = 'force-dynamic';
+
 export default async function ViewDeclarationPage({ params }: { params: { declarationId: string } }) {
   const { declarationId } = params;
   const id = parseInt(declarationId, 10);
@@ -20,4 +20,3 @@ export default async function ViewDeclarationPage({ params }: { params: { declar
 
   return <DeclarationView declaration={declaration} />;
 }
-
