@@ -5,7 +5,7 @@ import type { DeclarationPanne } from "@/lib/types";
 
 
 export const dynamic = 'force-dynamic';
-export default async function EditDeclarationPage({ params }: { params: { declarationId: string } }) {
+export default async function EditDeclarationPage({ params }: { params: Promise<{ declarationId: string }> }) {
     const resolvedParams = await params;
     const declarationId = parseInt(resolvedParams.declarationId, 10);
     if (isNaN(declarationId)) {
