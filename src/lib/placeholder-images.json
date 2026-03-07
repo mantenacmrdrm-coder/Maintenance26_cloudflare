@@ -1,0 +1,40 @@
+{
+  "placeholderImages": [
+    {
+      "id": "camion",
+      "description": "Image of a truck.",
+      "imageUrl": "https://images.unsplash.com/photo-1508515886360-7d100ba0374e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8dHJ1Y2slMjByb2FkfGVufDB8fHx8MTc2OTI4MDYxN3ww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "truck road"
+    },
+    {
+      "id": "voiture",
+      "description": "Image of a light vehicle or car.",
+      "imageUrl": "https://images.unsplash.com/photo-1723930298143-48843627a478?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxjYXIlMjBzdHJlZXR8ZW58MHx8fHwxNzY5MzEzODQ4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "car street"
+    },
+    {
+      "id": "engin",
+      "description": "Image of a construction vehicle like an excavator.",
+      "imageUrl": "https://images.unsplash.com/photo-1684065749640-6b855a5953a7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxleGNhdmF0b3IlMjBjb25zdHJ1Y3Rpb258ZW58MHx8fHwxNzY5Mjk2NzI3fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "excavator construction"
+    },
+    {
+      "id": "generateur",
+      "description": "Image of a power generator.",
+      "imageUrl": "https://images.unsplash.com/photo-1678775882799-2fba7042e7da?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8cG93ZXIlMjBnZW5lcmF0b3J8ZW58MHx8fHwxNzY5Mzc2MjE3fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "power generator"
+    },
+    {
+      "id": "chariot",
+      "description": "Image of a forklift.",
+      "imageUrl": "https://images.unsplash.com/photo-1573209680076-bd7ec7007616?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxmb3JrbGlmdCUyMHdhcmVob3VzZXxlbnwwfHx8fDE3NjkyOTc2MDV8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "forklift warehouse"
+    },
+    {
+      "id": "equipment-generic",
+      "description": "A generic image representing industrial equipment.",
+      "imageUrl": "https://images.unsplash.com/photo-1603814744463-674f56972593?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxpbmR1c3RyaWFsJTIwZXF1aXBtZW50fGVufDB8fHx8MTc2OTM3NjIxN3ww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "industrial equipment"
+    }
+  ]
+}

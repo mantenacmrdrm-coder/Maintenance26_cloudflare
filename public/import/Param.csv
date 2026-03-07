@@ -1,0 +1,24 @@
+﻿7;30;90;180;360;Opération « poste intervention »;Contrôler;Nettoyage;Changement
+;*;;;;Niveau d'huile du carter;C;;
+;*;;;;Etanchéité de tous les circuits;C;;
+;*;;;*;Frein;C;;CH
+;*;;;;courroie;C;;
+;*;*;;;Filtre à huile;;N;CH
+;;*;;;Vidanger le carter moteur;;N;CH
+;;;*;*;Filtre à air;;N;CH
+;;;;*;Filtre carburant;;N;
+;;*;;*;chaine;C;;CH
+;;;;*;soupape;C;;
+;*;;;;Graissage général;;N;CH
+;;*;;;moyeu de roue;C;;
+;*;;;;pneu;C;;
+;*;;;*;boite de vitesse;C;N;
+;;;*;;cardan;C;;
+;;;*;;embrayage;C;;
+;*;;;;circuit hydraulique;C;;
+;;*;;;pompe hydraulique;C;;
+;;;*;*;Filtre hydraulique;;N;CH
+;;;*;;Réservoir hydraulique;;N;
+;;*;;;alternateur;C;;
+;*;;;;batterie;C;;
+;;;*;;Faisceaux électriques;C;;

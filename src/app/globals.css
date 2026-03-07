@@ -1,0 +1,654 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Background - bleu très clair, presque blanc */
+    --background: 220 25% 98%;
+    --foreground: 220 30% 15%;
+
+    /* Cards - blanc avec légère transparence pour glassmorphism */
+    --card: 0 0% 100%;
+    --card-foreground: 220 30% 15%;
+
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 30% 15%;
+
+    /* Primary - Bleu royal profond (comme Maintenance Hub) */
+    --primary: 220 85% 55%;
+    --primary-dark: 220 85% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary - gris bleuté très clair */
+    --secondary: 220 20% 95%;
+    --secondary-foreground: 220 30% 15%;
+
+    /* Muted */
+    --muted: 220 20% 95%;
+    --muted-foreground: 220 15% 50%;
+
+    /* Accent - Orange/Ambre pour les highlights (comme "industrielle" dans l'image) */
+    --accent: 35 95% 55%;
+    --accent-dark: 35 95% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Destructive - rouge */
+    --destructive: 0 80% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    /* Success - vert émeraude */
+    --success: 145 70% 45%;
+    --success-foreground: 0 0% 100%;
+    
+    /* Warning - orange/jaune */
+    --warning: 38 95% 55%;
+    --warning-foreground: 38 95% 15%;
+
+    /* Borders - très subtils */
+    --border: 220 20% 90%;
+    --input: 220 20% 90%;
+    --ring: 220 85% 55%;
+
+    /* Radius - plus arrondi pour moderniser */
+    --radius: 0.875rem;
+    
+    /* Chart colors - harmonisés avec le bleu royal */
+    --chart-1: 220 85% 55%;   /* Bleu royal */
+    --chart-2: 200 90% 60%;   /* Cyan */
+    --chart-3: 35 95% 55%;    /* Orange/Ambre */
+    --chart-4: 145 70% 45%;   /* Vert */
+    --chart-5: 0 80% 60%;     /* Rouge */
+
+    /* Sidebar - fond sombre élégant */
+    --sidebar-background: 220 30% 12%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 220 85% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 30% 20%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 220 30% 20%;
+    --sidebar-ring: 220 85% 55%;
+  }
+
+  .dark {
+    --background: 220 30% 8%;
+    --foreground: 0 0% 95%;
+
+    --card: 220 25% 12%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 220 30% 10%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 220 85% 60%;
+    --primary-dark: 220 85% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 25% 18%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 220 25% 18%;
+    --muted-foreground: 220 15% 60%;
+
+    --accent: 35 95% 60%;
+    --accent-dark: 35 95% 50%;
+    --accent-foreground: 35 95% 5%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 95%;
+    
+    --success: 145 65% 50%;
+    --success-foreground: 0 0% 95%;
+    
+    --warning: 38 90% 55%;
+    --warning-foreground: 38 90% 5%;
+
+    --border: 220 25% 20%;
+    --input: 220 25% 20%;
+    --ring: 220 85% 60%;
+
+    --sidebar-background: 220 30% 8%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 220 85% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 25% 18%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 220 25% 18%;
+    --sidebar-ring: 220 85% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer components {
+  /* ============================================
+     CARD STYLES - Glassmorphism & Hover Effects
+     ============================================ */
+  
+  .dashboard-card {
+    @apply bg-card/80 backdrop-blur-sm rounded-2xl border border-white/20 shadow-lg;
+    @apply hover:shadow-xl hover:bg-card/90 transition-all duration-300;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .dashboard-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Variante avec gradient subtil */
+  .dashboard-card-gradient {
+    @apply dashboard-card;
+    background: linear-gradient(180deg, hsl(var(--card)/0.9) 0%, hsl(var(--card)/0.7) 100%);
+  }
+
+  /* Stat card avec style Maintenance Hub */
+  .stat-card {
+    @apply dashboard-card p-6 relative overflow-hidden;
+  }
+  
+  /* Variante featured avec gradient */
+  .stat-card-featured {
+    @apply stat-card;
+    background: linear-gradient(135deg, hsl(var(--primary)/0.05) 0%, transparent 100%);
+    border-color: hsl(var(--primary)/0.1);
+  }
+
+  /* ============================================
+     HERO & SECTION STYLES
+     ============================================ */
+
+  /* Hero gradient animé */
+  .hero-gradient {
+    background: linear-gradient(135deg, hsl(220 85% 55%) 0%, hsl(220 70% 45%) 50%, hsl(240 60% 35%) 100%);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-gradient::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    opacity: 0.4;
+  }
+
+  /* Section divider avec gradient */
+  .section-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(var(--border)), transparent);
+  }
+
+  /* ============================================
+     BADGES & TAGS
+     ============================================ */
+
+  /* Badge style "Nouveau" comme dans l'image */
+  .badge-feature {
+    @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold;
+    @apply bg-white/20 backdrop-blur-sm text-white border border-white/20;
+    animation: fadeIn 0.8s ease-out;
+  }
+
+  .badge-solid {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold;
+    @apply bg-primary/10 text-primary border border-primary/20;
+  }
+
+  /* ============================================
+     BUTTONS - CTA Styles
+     ============================================ */
+
+  /* Bouton principal style "Commencer la démo" */
+  .btn-primary-cta {
+    @apply inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl;
+    @apply bg-accent text-secondary font-semibold text-lg;
+    @apply hover:bg-accent-dark hover:shadow-xl hover:scale-[1.02] active:scale-[0.98];
+    @apply transition-all duration-300 shadow-lg shadow-accent/25;
+  }
+
+  /* Bouton secondaire outline */
+  .btn-secondary-cta {
+    @apply inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl;
+    @apply bg-transparent border-2 border-white/30 text-white font-semibold text-lg;
+    @apply hover:bg-white/10 hover:border-white/50 hover:shadow-lg;
+    @apply transition-all duration-300;
+  }
+
+  /* Bouton standard primary */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl;
+    @apply bg-primary text-primary-foreground font-semibold;
+    @apply hover:bg-primary-dark hover:shadow-lg hover:shadow-primary/25 hover:scale-[1.02] active:scale-[0.98];
+    @apply transition-all duration-200;
+  }
+
+  /* ============================================
+     FEATURES GRID - 2x2 Layout
+     ============================================ */
+
+  /* Grid de features comme dans l'image (2x2) */
+  .features-grid {
+    @apply grid grid-cols-2 gap-4;
+  }
+
+  /* Card feature individuelle - Glassmorphism */
+  .feature-card {
+    @apply bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20;
+    @apply hover:bg-white/15 hover:scale-[1.02] transition-all duration-300;
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .feature-card:nth-child(2) {
+    animation-delay: -1.5s;
+  }
+
+  .feature-card:nth-child(3) {
+    animation-delay: -3s;
+  }
+
+  .feature-card:nth-child(4) {
+    animation-delay: -4.5s;
+  }
+
+  /* ============================================
+     SIDEBAR - Modernisée
+     ============================================ */
+
+  .sidebar {
+    @apply bg-[hsl(var(--sidebar-background))] text-[hsl(var(--sidebar-foreground))];
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl relative;
+    @apply text-[hsl(var(--sidebar-foreground))]/70 hover:text-[hsl(var(--sidebar-foreground))];
+    @apply hover:bg-[hsl(var(--sidebar-accent))] transition-all duration-200;
+  }
+
+  .sidebar-item::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: hsl(var(--sidebar-primary));
+    transition: width 0.3s ease;
+  }
+
+  .sidebar-item:hover::after {
+    width: 100%;
+  }
+
+  .sidebar-item.active {
+    @apply bg-primary text-primary-foreground shadow-lg shadow-primary/25;
+  }
+
+  /* ============================================
+     ICON CONTAINERS - Modernisés
+     ============================================ */
+
+  .icon-container {
+    @apply w-12 h-12 rounded-xl flex items-center justify-center;
+    @apply transition-transform duration-300 hover:scale-110;
+  }
+  
+  .icon-container-primary { 
+    @apply icon-container bg-primary/15 text-primary ring-2 ring-primary/20; 
+  }
+  .icon-container-accent { 
+    @apply icon-container bg-accent/15 text-accent ring-2 ring-accent/20; 
+  }
+  .icon-container-warning { 
+    @apply icon-container bg-warning/15 text-warning ring-2 ring-warning/20; 
+  }
+  .icon-container-success { 
+    @apply icon-container bg-success/15 text-success ring-2 ring-success/20; 
+  }
+  .icon-container-destructive { 
+    @apply icon-container bg-destructive/15 text-destructive ring-2 ring-destructive/20; 
+  }
+
+  /* Grand icon container pour hero/features */
+  .icon-container-lg {
+    @apply w-16 h-16 rounded-2xl flex items-center justify-center text-2xl;
+    @apply transition-all duration-300 hover:scale-110 hover:rotate-3;
+  }
+
+  /* ============================================
+     TREND INDICATORS - Améliorés
+     ============================================ */
+
+  .trend-up { 
+    @apply text-success flex items-center gap-1 text-sm font-semibold;
+    @apply bg-success/10 px-2.5 py-1 rounded-full; 
+  }
+  
+  .trend-down { 
+    @apply text-destructive flex items-center gap-1 text-sm font-semibold;
+    @apply bg-destructive/10 px-2.5 py-1 rounded-full; 
+  }
+
+  /* ============================================
+     TYPOGRAPHY - Style Maintenance Hub
+     ============================================ */
+
+  .stat-value { 
+    @apply text-4xl font-bold text-foreground tracking-tight; 
+  }
+  
+  .stat-label { 
+    @apply text-sm text-muted-foreground font-medium uppercase tracking-wide; 
+  }
+
+  /* Texte avec accent orange (comme "industrielle") */
+  .text-accent-highlight {
+    @apply text-accent font-bold;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary)/0.8));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ============================================
+     SECTION HEADERS
+     ============================================ */
+
+  .section-header {
+    @apply flex flex-col items-center gap-3 text-center mb-16;
+  }
+  
+  .section-badge {
+    @apply px-4 py-1.5 rounded-full text-sm font-semibold bg-primary/10 text-primary;
+    @apply animate-fade-in;
+  }
+  
+  .section-title {
+    @apply text-3xl md:text-4xl font-bold text-foreground;
+  }
+  
+  .section-title-accent {
+    @apply gradient-text;
+  }
+
+  /* ============================================
+     FORM STYLES
+     ============================================ */
+
+  .form-input {
+    @apply w-full px-4 py-3 rounded-xl border border-border;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent;
+    @apply transition-all duration-200;
+  }
+
+  .form-input:focus {
+    box-shadow: 0 0 0 4px hsl(var(--primary)/0.1);
+  }
+
+  /* ============================================
+     NAVIGATION LINKS
+     ============================================ */
+
+  .nav-link {
+    @apply relative text-sm font-medium text-foreground/80 hover:text-primary transition-colors;
+  }
+
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: hsl(var(--primary));
+    transition: width 0.3s ease;
+  }
+
+  .nav-link:hover::after {
+    width: 100%;
+  }
+
+  /* ============================================
+     SOCIAL ICONS
+     ============================================ */
+
+  .social-icon {
+    @apply w-10 h-10 rounded-full flex items-center justify-center;
+    @apply bg-white/10 text-white transition-all duration-300;
+  }
+
+  .social-icon:hover {
+    @apply bg-primary;
+    transform: translateY(-3px);
+  }
+
+  /* ============================================
+     IMAGE & MEDIA
+     ============================================ */
+
+  .image-hover {
+    @apply transition-transform duration-500 hover:scale-105;
+  }
+
+  .image-overlay {
+    @apply absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300;
+  }
+}
+
+@layer utilities {
+  /* ============================================
+     ANIMATIONS KEYFRAMES
+     ============================================ */
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-20px); }
+  }
+
+  @keyframes slideUp {
+    0% { transform: translateY(20px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  @keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 20px hsl(var(--primary)/0.4); }
+    50% { box-shadow: 0 0 40px hsl(var(--primary)/0.6); }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  /* ============================================
+     ANIMATION CLASSES
+     ============================================ */
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.8s ease-out;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .animate-shimmer {
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  /* Animation delay utilities */
+  .animation-delay-150 { animation-delay: 150ms; }
+  .animation-delay-300 { animation-delay: 300ms; }
+  .animation-delay-500 { animation-delay: 500ms; }
+  .animation-delay-700 { animation-delay: 700ms; }
+  .animation-delay-1000 { animation-delay: 1000ms; }
+
+  /* ============================================
+     GRADIENTS
+     ============================================ */
+
+  .gradient-royal {
+    background: linear-gradient(135deg, hsl(220 85% 55%) 0%, hsl(220 70% 45%) 100%);
+  }
+
+  .gradient-card {
+    background: linear-gradient(180deg, hsl(220 25% 98%) 0%, hsl(220 25% 96%) 100%);
+  }
+
+  .gradient-text-primary {
+    background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary)/0.8));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ============================================
+     SHADOWS
+     ============================================ */
+
+  .shadow-card {
+    box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.08), 
+                0 8px 32px -8px rgba(0, 0, 0, 0.04);
+  }
+
+  .shadow-card-hover {
+    box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.12), 
+                0 12px 40px -8px rgba(0, 0, 0, 0.08);
+  }
+
+  .shadow-glow {
+    box-shadow: 0 0 40px -10px hsl(var(--primary)/0.4);
+  }
+
+  /* ============================================
+     GLASSMORPHISM
+     ============================================ */
+
+  .glass {
+    @apply bg-white/80 backdrop-blur-xl border border-white/20;
+  }
+
+  .glass-dark {
+    @apply bg-black/20 backdrop-blur-xl border border-white/10;
+  }
+
+  .glass-primary {
+    @apply bg-primary/10 backdrop-blur-md border border-primary/20;
+  }
+
+  /* ============================================
+     HOVER EFFECTS
+     ============================================ */
+
+  .hover-lift {
+    @apply transition-all duration-300;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  }
+
+  .hover-scale {
+    @apply transition-transform duration-300;
+  }
+
+  .hover-scale:hover {
+    transform: scale(1.05);
+  }
+
+  .hover-glow:hover {
+    box-shadow: 0 0 30px hsl(var(--primary)/0.3);
+  }
+
+  /* ============================================
+     SCROLL & INTERSECTION
+     ============================================ */
+
+  .scroll-reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  }
+
+  .scroll-reveal.revealed {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ============================================
+     UTILITIES
+     ============================================ */
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .bg-pattern {
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+}
+
+@media print {
+  body {
+    background-color: white !important;
+  }
+  .sidebar, .print-hide {
+    display: none !important;
+  }
+  .sidebar-inset {
+    margin: 0 !important;
+    padding: 1rem !important;
+    max-width: 100% !important;
+  }
+  .dashboard-card {
+    border: 1px solid #e5e7eb !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+    background: white !important;
+  }
+  h1, h2, h3, h4, p, span, div {
+    color: black !important;
+  }
+  .text-muted-foreground {
+    color: #6b7280 !important;
+  }
+  .stat-value {
+    color: black !important;
+  }
+  .recharts-wrapper {
+    break-inside: avoid;
+  }
+  [role="tabpanel"][data-state="inactive"] {
+    display: block !important;
+  }
+}
