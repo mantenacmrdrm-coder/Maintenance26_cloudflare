@@ -11,6 +11,7 @@ export default async function ViewDeclarationPage({ params }: { params: Promise<
         notFound();
     }
 
+    
     const declaration = await getDeclaration(declarationId);
 
     if (!declaration) {
