@@ -4,8 +4,15 @@ import { DeclarationView } from "./view";
 
 export const dynamic = 'force-dynamic';
 
-export default async function ViewDeclarationPage({ params }: { params: { declarationId: string } }) {
-  const { declarationId } = params;
+// 1. Mise à jour du type : params est maintenant un Promise
+export default async function ViewDeclarationPage({ 
+  params 
+}: { 
+  params: Promise<{ declarationId: string }> 
+}) {
+  // 2. Il faut faire un await sur params avant de le déstructurer
+  const { declarationId } = await params;
+  
   const id = parseInt(declarationId, 10);
 
   if (isNaN(id)) {
