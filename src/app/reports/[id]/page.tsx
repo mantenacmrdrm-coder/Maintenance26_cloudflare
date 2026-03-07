@@ -8,7 +8,7 @@ import { ArrowLeft } from 'lucide-react';
 
 
 export const dynamic = 'force-dynamic';
-export default async function ReportPage({ params }: { params: { id: string } }) {
+export default async function ReportPage({ params }: { params: Promise<{ id: string } }) {
   const resolvedParams = await params;
   const reportId = parseInt(resolvedParams.id, 10);
   if (isNaN(reportId)) {

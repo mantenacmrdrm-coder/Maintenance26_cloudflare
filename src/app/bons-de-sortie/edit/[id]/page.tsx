@@ -4,8 +4,7 @@ import { BonForm } from "../../bon-form";
 import type { BonDeSortie } from "@/lib/types";
 
 
-export const dynamic = 'force-dynamic';
-export default async function EditBonPage({ params }: { params: { id: string } }) {
+export default async function EditBonPage({ params }: { params: Promise<{ id: string }> }) {
     const resolvedParams = await params;
     const bonId = parseInt(resolvedParams.id, 10);
     if (isNaN(bonId)) {
