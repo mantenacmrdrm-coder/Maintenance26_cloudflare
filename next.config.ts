@@ -24,8 +24,6 @@ const nextConfig: NextConfig = {
         'localhost:3000',
         '127.0.0.1:3000',
       ],
-      // Optionnel : désactiver la vérification CSRF en dev uniquement
-      // ⚠️ À ne jamais utiliser en production
       bodySizeLimit: '50mb',
     },
   },
@@ -63,6 +61,16 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
+  },
+
+  // ✅ AJOUT IMPORTANT POUR CLOUDFLARE D1
+  // Cela empêche Next.js d'essayer de "bundler" la librairie native D1
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push('@libsql/client');
+    }
+    return config;
   },
 };
 
