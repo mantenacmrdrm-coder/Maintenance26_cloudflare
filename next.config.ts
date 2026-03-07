@@ -3,6 +3,7 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
+    
   },
 
   // ✅ Option racine pour le développement (Next.js 14.2+)
