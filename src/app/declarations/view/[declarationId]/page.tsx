@@ -4,7 +4,7 @@ import { DeclarationView } from "./view";
 
 
 export const dynamic = 'force-dynamic';
-export default async function ViewDeclarationPage({ params }: { params: { declarationId: string } }) {
+export default async function ViewDeclarationPage({ params }: { params: Promise<{ declarationId: string }> }) {
     const resolvedParams = await params;
     const declarationId = parseInt(resolvedParams.declarationId, 10);
     if (isNaN(declarationId)) {
