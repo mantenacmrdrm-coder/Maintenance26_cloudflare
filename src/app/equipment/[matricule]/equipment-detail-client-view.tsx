@@ -356,7 +356,7 @@ export function EquipmentDetailClientView({ equipment, operations, curativeHisto
                 </TabsList>
                 {/*<TabsContent value="preventive" className="mt-6 print:block">
                     <PreventativeMaintenanceHistory history={preventativeHistory} />
-                </TabsContent>*/}
+                </TabsContent>*/} 
                 <TabsContent value="curative" className="mt-6 print:block">
                    <CurativeMaintenanceHistory history={curativeHistory} />
                 </TabsContent>
