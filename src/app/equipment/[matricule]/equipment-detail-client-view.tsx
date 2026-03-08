@@ -47,7 +47,7 @@ type ClientViewProps = {
     dynamicStatus: 'En Marche' | 'En Panne' | 'Actif';
 }
 
-export function EquipmentDetailClientView({ equipment, operations, preventativeHistory, curativeHistory, dynamicStatus }: ClientViewProps) {
+export function EquipmentDetailClientView({ equipment, operations, curativeHistory, dynamicStatus }: ClientViewProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { matricule } = equipment;
