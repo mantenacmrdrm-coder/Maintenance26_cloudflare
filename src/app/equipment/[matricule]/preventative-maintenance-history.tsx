@@ -14,24 +14,24 @@ type Props = {
   history: Record<string, PreventativeMaintenanceEntry[]>;
 };
 
-export default PreventativeMaintenanceHistory({ history }: Props) {
+const PreventativeMaintenanceHistory = ({ history }: Props) => {
 
   const hasHistory = history && Object.keys(history).length > 0;
 
   if (!hasHistory) {
     return (
-        <Card>
-             <CardHeader>
-                <CardTitle>Maintenance Préventive</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="flex flex-col items-center justify-center h-48 text-center bg-muted/50 rounded-lg">
-                    <Wrench className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-lg font-medium">Aucun historique préventif</p>
-                    <p className="text-muted-foreground">Aucune donnée de maintenance préventive trouvée pour cet équipement.</p>
-                </div>
-            </CardContent>
-        </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Maintenance Préventive</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center h-48 text-center bg-muted/50 rounded-lg">
+            <Wrench className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-lg font-medium">Aucun historique préventif</p>
+            <p className="text-muted-foreground">Aucune donnée de maintenance préventive trouvée pour cet équipement.</p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
