@@ -14,7 +14,7 @@ type Props = {
   history: Record<string, PreventativeMaintenanceEntry[]>;
 };
 
-export function PreventativeMaintenanceHistory({ history }: Props) {
+export default PreventativeMaintenanceHistory({ history }: Props) {
 
   const hasHistory = history && Object.keys(history).length > 0;
 
