@@ -13,7 +13,7 @@ import Image from 'next/image';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { EquipmentImages } from '@/lib/equipment-images';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import  PreventativeMaintenanceHistory  from './preventative-maintenance-history';
+//import  PreventativeMaintenanceHistory  from './preventative-maintenance-history';
 import { CurativeMaintenanceHistory } from './curative-maintenance-history';
 import { Wrench, Zap, SlidersHorizontal, GaugeCircle, Droplet, Filter, Power, PowerOff, Upload, Printer } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
@@ -354,9 +354,9 @@ export function EquipmentDetailClientView({ equipment, operations, preventativeH
                     <TabsTrigger value="preventive">Maintenance Préventive</TabsTrigger>
                     <TabsTrigger value="curative">Maintenance Curative</TabsTrigger>
                 </TabsList>
-                <TabsContent value="preventive" className="mt-6 print:block">
+                {/*<TabsContent value="preventive" className="mt-6 print:block">
                     <PreventativeMaintenanceHistory history={preventativeHistory} />
-                </TabsContent>
+                </TabsContent>*/}
                 <TabsContent value="curative" className="mt-6 print:block">
                    <CurativeMaintenanceHistory history={curativeHistory} />
                 </TabsContent>
