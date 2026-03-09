@@ -29,30 +29,6 @@ const nextConfig: NextConfig = {
     // middlewarePrefetch: 'flexible',  // optionnel, teste si prefetch bugge
   },
 
-  // Tweaks webpack pour éviter des crashes build sur CF (cache, plugins inutiles)
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      // Évite certains modules Node.js côté client
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        path: false,
-        os: false,
-      };
-    }
-
-    // Désactive cache webpack si build instable sur CF
-    config.cache = false;
-
-    // Filtre plugins de cache problématiques (souvent mentionné)
-    config.plugins = config.plugins?.filter((plugin: any) => {
-      const name = plugin.constructor.name;
-      return !name.includes('Cache') && !name.includes('MiniCssExtract');
-    });
-
-    return config;
-  },
-
   // Optionnel mais utile : désactive dev indicators en prod
   devIndicators: {
     buildActivity: false,
