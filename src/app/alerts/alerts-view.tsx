@@ -1,21 +1,56 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+
+// UI Components
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { 
+  Popover, 
+  PopoverContent, 
+  PopoverTrigger 
+} from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
+import { 
+  DropdownMenu, 
+  DropdownMenuTrigger, 
+  DropdownMenuContent, 
+  DropdownMenuCheckboxItem, 
+  DropdownMenuSeparator 
+} from '@/components/ui/dropdown-menu';
+
+// Hooks
 import { useToast } from '@/hooks/use-toast';
+
+// Actions & Types
 import { getPreventativeAlerts } from '@/lib/actions/maintenance-actions';
 import type { Alert } from '@/lib/types';
-import { Loader2, AlertTriangle, CheckCircle, Info, Download, CalendarIcon, Search, ChevronDown } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+
+// Icons
+import { 
+  Loader2, 
+  AlertTriangle, 
+  CheckCircle, 
+  Info, 
+  Download, 
+  CalendarIcon, 
+  Search, 
+  ChevronDown 
+} from 'lucide-react';
+
+// Utils & Constants
 import { OFFICIAL_ENTRETIENS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import dayjs from 'dayjs';
-import { Input } from '@/components/ui/input';
 
 function AlertCard({ alert }: { alert: Alert }) {
   const urgencyConfig = {
