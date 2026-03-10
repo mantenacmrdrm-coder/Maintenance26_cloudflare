@@ -53,7 +53,10 @@ export function BonForm({ initialData }: Props) {
     resolver: zodResolver(formSchema),
     defaultValues: isEditMode ? {
         ...initialData,
-        date: dayjs(initialData.date, 'DD/MM/YYYY').toDate(),
+        destinataire_code: initialData.destinataire_code ?? undefined,
+        transporteur_nom: initialData.transporteur_nom ?? undefined,
+        transporteur_immatriculation: initialData.transporteur_immatriculation ?? undefined,
+        date: initialData.date ? dayjs(initialData.date, 'DD/MM/YYYY').toDate() : new Date(),
     } : {
       date: new Date(),
       items: [{ code: '', designation: '', unite: 'L', quantite: 1 }],
