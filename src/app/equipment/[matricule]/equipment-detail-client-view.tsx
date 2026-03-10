@@ -6,15 +6,15 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
+  CardTitle, 
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { EquipmentImages } from '@/lib/equipment-images';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PreventativeMaintenanceHistory } from './preventative-maintenance-history';
-import { CurativeMaintenanceHistory } from "./curative-maintenance-history";
+import { PreventativeMaintenanceHistory } from '@/app/equipment/[matricule]/preventative-maintenance-history';
+import { CurativeMaintenanceHistory } from './curative-maintenance-history';
 import { Wrench, Zap, SlidersHorizontal, GaugeCircle, Droplet, Filter, Power, PowerOff, Upload, Printer } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
