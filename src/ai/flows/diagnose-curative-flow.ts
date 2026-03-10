@@ -73,9 +73,9 @@ const diagnoseCurativeFlow = ai.defineFlow(
 - Categorie: ${equipment.categorie}
     `;
 
-    const historySummary = history.length > 0
-        ? history.slice(0, 5).map(h => `- ${h.dateEntree}: ${h.panneDeclaree} (Pièces: ${h.piecesRemplacees.join(', ') || 'N/A'})`).join('\n')
-        : 'No relevant repair history found.';
+const historySummary = history.length > 0
+  ? history.slice(0, 5).map((h: { dateEntree: string; panneDeclaree: string; piecesRemplacees: string[] }) => `- ${h.dateEntree}: ${h.panneDeclaree} (Pièces: ${h.piecesRemplacees.join(', ') || 'N/A'})`).join('\n')
+  : 'No relevant repair history found.';
 
     const { output } = await diagnosisPrompt({
         panneDeclaree: input.panneDeclaree,
