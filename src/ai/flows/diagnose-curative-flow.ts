@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+//<<<<<<< HEAD
 'use server';
 /**
  * @fileOverview An AI agent for diagnosing equipment breakdowns.
@@ -144,4 +144,4 @@ const historySummary = history.length > 0
 export async function getCurativeDiagnosis(input: DiagnoseCurativeInput): Promise<DiagnoseCurativeOutput> {
     return await diagnoseCurativeFlow(input);
 }
->>>>>>> fb924f8acaae4fb3d39e974f375c9bd83345f2a1
+//>>>>>>> fb924f8acaae4fb3d39e974f375c9bd83345f2a1
