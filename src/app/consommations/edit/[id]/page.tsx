@@ -6,8 +6,13 @@ import { EditConsumptionForm } from "./edit-consumption-form";
 export const dynamic = 'force-dynamic';
 // Gemini-Correction: Changed params to a Promise to align with project conventions and fix build error.
 export default async function EditConsumptionPage({ params }: { params: Promise<{ id: string }> }) {
+<<<<<<< HEAD
     const resolvedParams = await params;
     const consumptionId = parseInt(resolvedParams.id, 10);
+=======
+    const { id } = await params;
+    const consumptionId = parseInt(id, 10);
+>>>>>>> fb924f8acaae4fb3d39e974f375c9bd83345f2a1
     if (isNaN(consumptionId)) {
         notFound();
     }
