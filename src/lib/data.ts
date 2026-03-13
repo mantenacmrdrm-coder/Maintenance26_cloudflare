@@ -1,11 +1,9 @@
-
 'use server';
 
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import sqlite3 from 'sqlite3';
-import { open, type Database } from 'sqlite';
+import { createClient } from '@libsql/client';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import isoWeek from 'dayjs/plugin/isoWeek';
@@ -19,8 +17,6 @@ import { Readable } from 'stream';
 import isBetween from 'dayjs/plugin/isBetween';
 import initialStocks from './initial-stock.json';
 import 'dayjs/locale/fr';
-// Ajoute ça avec les autres imports
-import { DB_PATH } from '@/lib/db';
 
 dayjs.locale('fr');
 dayjs.extend(isBetween);
@@ -80,23 +76,6 @@ function findMatchedEntretien(piece: string): (typeof OFFICIAL_ENTRETIENS)[numbe
 let historyCache: { headers: readonly string[]; rows: (string | null)[][]; } | null = null;
 let historyCacheTimestamp: number | null = null;
 
-// Database file path selection:
-// - If `SQLITE_DB_PATH` env var is set, use it.
-// - In production (e.g. Vercel), default to the OS temp dir because serverless filesystems are ephemeral/read-only.
-// - Locally, keep the DB in the project root for convenience.
-///////////////////////////////////////////////////////////
-//const SQLITE_DB_PATH_ENV = process.env.SQLITE_DB_PATH;
-//let DB_PATH: string;
-//if (SQLITE_DB_PATH_ENV && SQLITE_DB_PATH_ENV.trim() !== '') {
-//    DB_PATH = SQLITE_DB_PATH_ENV;
-//} else if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-//    DB_PATH = path.join(os.tmpdir(), 'gmao_data.db');
-//    console.warn('Using ephemeral SQLite DB path (not persistent):', DB_PATH);
-//} else {
-//    DB_PATH = path.join(process.cwd(), 'gmao_data.db');
-//}
-
-
 const normalize = (str: string | null | undefined): string => {
     if (!str) return '';
     return str.toString().toLowerCase()
@@ -105,30 +84,36 @@ const normalize = (str: string | null | undefined): string => {
         .replace(/[^a-z0-9]/g, '');
 };
 
-import { createClient } from '@libsql/client'; // Ajoute cet import en haut
-
-// ... reste du code ...
-
+// Configuration de la base de données
 const getDb = async () => {
-  // En développement local ou sur Cloudflare, on utilise une variable d'environnement
-  // On va utiliser l'URL directe fournie par Cloudflare ou un fichier local pour les tests
-  const url = process.env.TURSO_DATABASE_URL || 'file:local-dev.db'; 
-  const authToken = process.env.TURSO_AUTH_TOKEN;
+    // En mode build, retourner un client factice
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+        const { createClient } = await import('@libsql/client');
+        return createClient({ url: 'file::memory:' });
+    }
 
-  const db = createClient({ 
-    url: url,
-    authToken: authToken,
-  });
+    // Utiliser Turso en production ou fichier local en développement
+    const url = process.env.TURSO_DATABASE_URL || 'file:local-dev.db';
+    const authToken = process.env.TURSO_AUTH_TOKEN;
 
-  // On garde le mode synchronous = FULL pour la sécurité des écritures
-  // (Note: D1 gère souvent ça nativement, mais on le laisse pour être sûr)
-  await db.execute('PRAGMA synchronous = FULL;'); 
-  
-  return db;
+    const db = createClient({ 
+        url: url,
+        authToken: authToken,
+    });
+
+    try {
+        await db.execute('PRAGMA synchronous = FULL;');
+    } catch (e) {
+        // Ignorer si non supporté (D1)
+    }
+    
+    return db;
 };
 
-const withDb = async <T>(operation: (db: Awaited<ReturnType<typeof getDb>>) => Promise<T>): Promise<T> => {
-    let db: Awaited<ReturnType<typeof getDb>> | null = null;
+type DbClient = Awaited<ReturnType<typeof getDb>>;
+
+const withDb = async <T>(operation: (db: DbClient) => Promise<T>): Promise<T> => {
+    let db: DbClient | null = null;
     try {
         db = await getDb();
         return await operation(db);
@@ -136,19 +121,38 @@ const withDb = async <T>(operation: (db: Awaited<ReturnType<typeof getDb>>) => P
         console.error('Database operation failed:', error);
         throw error;
     } finally {
-        await db?.close();
+        if (db && typeof db.close === 'function') {
+            try {
+                await db.close();
+            } catch (e) {
+                // Ignorer les erreurs de fermeture
+            }
+        }
     }
 };
 
-const runAsync = (db: Database, sql: string, params: any[] = []): Promise<{ lastID: number, changes: number }> => {
-    return db.run(sql, params).then(result => ({
-        lastID: result.lastID ?? 0,
-        changes: result.changes ?? 0
-    }));
+// Fonctions d'aide pour les requêtes
+const runQuery = async (db: DbClient, sql: string, params: any[] = []) => {
+    return await db.execute({
+        sql,
+        args: params
+    });
 };
 
-const allAsync = (db: Database, sql: string, params: any[] = []): Promise<any[]> => {
-    return db.all(sql, params);
+const getQuery = async (db: DbClient, sql: string, params: any[] = []) => {
+    const result = await db.execute({
+        sql,
+        args: params
+    });
+    return result.rows;
+};
+
+const getOne = async (db: DbClient, sql: string, params: any[] = []) => {
+    const result = await db.execute({
+        sql,
+        args: params
+    });
+    return result.rows[0] || null;
 };
 
 const parseCsv = async (buffer: Buffer): Promise<any[]> => {
@@ -156,7 +160,7 @@ const parseCsv = async (buffer: Buffer): Promise<any[]> => {
     const rows: any[] = [];
     const stream = Readable.from(buffer);
     stream
-      .pipe(iconv.decodeStream('utf-8')) // &lt;-- changement ici
+      .pipe(iconv.decodeStream('utf-8'))
       .pipe(csv({ 
           separator: ';',
           mapHeaders: ({ header }) => header.trim().replace(/\s+/g, '_').replace(/[."(),/]/g, '').toLowerCase() || null
@@ -167,15 +171,17 @@ const parseCsv = async (buffer: Buffer): Promise<any[]> => {
   });
 };
 
-const importCsvToTable = async (db: Awaited<ReturnType<typeof getDb>>, tableName: string, csvFileName: string) => {
-  const tableExists = await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [tableName]);
-  if (tableExists) {
-    return `Table ${tableName} already exists. Skipping import.`;
+const importCsvToTable = async (db: DbClient, tableName: string, csvFileName: string) => {
+  try {
+    const tableExists = await getOne(db, "SELECT name FROM sqlite_master WHERE type='table' AND name = ?", [tableName]);
+    if (tableExists) {
+      return `Table ${tableName} already exists. Skipping import.`;
+    }
+  } catch (e) {
+    // Si la table n'existe pas, on continue
   }
   
-  // --- CHANGEMENT 1 : LECTURE DU FICHIER VIA FETCH ---
-  // On ne peut pas utiliser 'fs' sur Cloudflare. On récupère le fichier statique via HTTP.
-  // Il faut définir NEXT_PUBLIC_SITE_URL dans ton fichier .env (ex: http://localhost:3000 ou https://ton-site.com)
+  // Récupération du fichier CSV
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
   const fileUrl = `${baseUrl}/import/${csvFileName}`;
 
@@ -188,7 +194,7 @@ const importCsvToTable = async (db: Awaited<ReturnType<typeof getDb>>, tableName
       }
       
       const arrayBuffer = await response.arrayBuffer();
-      const fileBuffer = Buffer.from(arrayBuffer); // Conversion nécessaire pour parseCsv
+      const fileBuffer = Buffer.from(arrayBuffer);
       
       rows = await parseCsv(fileBuffer);
   } catch (e: any) {
@@ -206,15 +212,11 @@ const importCsvToTable = async (db: Awaited<ReturnType<typeof getDb>>, tableName
   
   try {
     const createColumns = headers.map(h => `"${h}" TEXT`).join(', ');
-    await db.exec(`CREATE TABLE "${tableName}" (id INTEGER PRIMARY KEY AUTOINCREMENT, ${createColumns})`);
+    await runQuery(db, `CREATE TABLE IF NOT EXISTS "${tableName}" (id INTEGER PRIMARY KEY AUTOINCREMENT, ${createColumns})`);
     
     const insertPlaceholders = headers.map(() => '?').join(', ');
     const insertSql = `INSERT INTO "${tableName}" (${headers.map(h => `"${h}"`).join(', ')}) VALUES (${insertPlaceholders})`;
 
-    // --- CHANGEMENT 2 : OPTIMISATION POUR D1 (BATCH INSERT) ---
-    // Au lieu de faire une boucle avec stmt.run (lent), on prépare tout et on envoie en une fois.
-    // C'est la méthode recommandée pour Cloudflare D1.
-    
     const statements = rows.map(row => {
       const values = headers.map(h => row[h] ?? null);
       return {
@@ -223,19 +225,22 @@ const importCsvToTable = async (db: Awaited<ReturnType<typeof getDb>>, tableName
       };
     });
 
-    // db.batch envoie tout les requêtes en un seul réseau round-trip
     await db.batch(statements);
 
     return `Imported ${rows.length} rows into new table ${tableName}.`;
     
   } catch (dbError: any) {
     console.error(`DB Error for ${tableName}:`, dbError);
-    // Note: D1 gère les transactions automatiquement pour batch ou échoue tout le lot si une erreur survient
     throw new Error(`Failed to import ${tableName}: ${dbError.message}`);
   }
 };
 
 export async function initializeDatabase() {
+    // Skip en mode build
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+        return { success: true, message: 'Build mode - DB initialization skipped' };
+    }
+
     try {
         return await withDb(async (db) => {
              const EXCLUSIONS_NORM: Record<string, Set<string>> = {
@@ -269,37 +274,42 @@ export async function initializeDatabase() {
             
             try {
                 const tableName = 'consolide';
-                const tableExists = await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [tableName]);
+                const tableExists = await getOne(db, "SELECT name FROM sqlite_master WHERE type='table' AND name=?", [tableName]);
                 if (tableExists) {
                     messages.push(`Table ${tableName} already exists. Skipping import.`);
                 } else {
                     const csvFileName = 'consolide.csv';
                     const createColumns = CONSOLIDE_COLUMNS_ORDER.map(col => `"${col}" TEXT`).join(', ');
-                    await db.exec(`CREATE TABLE "${tableName}" (id INTEGER PRIMARY KEY AUTOINCREMENT, ${createColumns})`);
+                    await runQuery(db, `CREATE TABLE "${tableName}" (id INTEGER PRIMARY KEY AUTOINCREMENT, ${createColumns})`);
                     messages.push(`Table ${tableName} created with fixed schema.`);
                 
-                    const absPath = path.join(process.cwd(), 'public', 'import', csvFileName);
-                    const fileBuffer = await fs.readFile(absPath);
+                    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+                    const fileUrl = `${baseUrl}/import/${csvFileName}`;
+                    const response = await fetch(fileUrl);
+                    
+                    if (!response.ok) {
+                        throw new Error(`Impossible de télécharger ${csvFileName}`);
+                    }
+                    
+                    const arrayBuffer = await response.arrayBuffer();
+                    const fileBuffer = Buffer.from(arrayBuffer);
                     const rows = await parseCsv(fileBuffer);
                 
                     if (rows && rows.length > 0) {
                         const placeholders = CONSOLIDE_COLUMNS_ORDER.map(() => '?').join(', ');
                         const insertSql = `INSERT INTO "${tableName}" (${CONSOLIDE_COLUMNS_ORDER.map(h => `"${h}"`).join(', ')}) VALUES (${placeholders})`;
                 
-                        await db.exec('BEGIN TRANSACTION');
-                        const stmt = await db.prepare(insertSql);
-                        for (const row of rows) {
-                            const values = CONSOLIDE_COLUMNS_ORDER.map(header => row[header] ?? null);
-                            await stmt.run(values);
-                        }
-                        await stmt.finalize();
-                        await db.exec('COMMIT');
+                        const statements = rows.map(row => ({
+                            sql: insertSql,
+                            args: CONSOLIDE_COLUMNS_ORDER.map(header => row[header] ?? null)
+                        }));
+                        
+                        await db.batch(statements);
                         messages.push(`Imported ${rows.length} rows into ${tableName}.`);
                     }
                 }
             } catch (error: any) {
                 messages.push(`Special handling for consolide.csv failed: ${error.message}`);
-                await db.exec('ROLLBACK').catch(() => {});
             }
 
             const migrationMessages = [];
@@ -311,17 +321,17 @@ export async function initializeDatabase() {
 
             for (const table of tablesToMigrate) {
                 try {
-                    const tableInfo = await db.all(`PRAGMA table_info(${table.name})`);
-                    const columnExists = tableInfo.some(col => col.name === 'date_iso');
+                    const tableInfo = await getQuery(db, `PRAGMA table_info(${table.name})`);
+                    const columnExists = tableInfo.some((col: any) => col.name === 'date_iso');
 
                     if (!columnExists) {
-                        await db.exec(`ALTER TABLE ${table.name} ADD COLUMN date_iso TEXT;`);
-                        await db.exec(`
+                        await runQuery(db, `ALTER TABLE ${table.name} ADD COLUMN date_iso TEXT;`);
+                        await runQuery(db, `
                             UPDATE ${table.name}
                             SET date_iso = substr(${table.dateCol}, 7, 4) || '-' || substr(${table.dateCol}, 4, 2) || '-' || substr(${table.dateCol}, 1, 2)
                             WHERE ${table.dateCol} IS NOT NULL AND ${table.dateCol} != ''
                         `);
-                        await db.exec(`CREATE INDEX IF NOT EXISTS idx_${table.name}_date_iso ON ${table.name}(date_iso);`);
+                        await runQuery(db, `CREATE INDEX IF NOT EXISTS idx_${table.name}_date_iso ON ${table.name}(date_iso);`);
                         migrationMessages.push(`Optimized dates for table '${table.name}'.`);
                     }
                 } catch (e: any) {
@@ -346,7 +356,7 @@ export async function initializeDatabase() {
             }
 
             try {
-                await db.exec(`
+                await runQuery(db, `
                     CREATE TABLE IF NOT EXISTS category_entretiens (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         category TEXT NOT NULL,
@@ -356,10 +366,10 @@ export async function initializeDatabase() {
                     )
                 `);
 
-                const categories = (await db.all('SELECT DISTINCT categorie FROM matrice')).map(r => r.categorie).filter(Boolean);
-                const insertStmt = await db.prepare('INSERT OR IGNORE INTO category_entretiens (category, entretien, is_active) VALUES (?, ?, ?)');
-
-                await db.run('BEGIN TRANSACTION');
+                const categoriesRows = await getQuery(db, 'SELECT DISTINCT categorie FROM matrice');
+                const categories = categoriesRows.map((r: any) => r.categorie).filter(Boolean);
+                
+                const statements = [];
                 for (const category of categories) {
                     const categoryNorm = normalize(category || '').replace(/,/g, '');
                     const exclusions = EXCLUSIONS_NORM[categoryNorm] || new Set();
@@ -367,18 +377,23 @@ export async function initializeDatabase() {
                     for (const entretien of OFFICIAL_ENTRETIENS) {
                         const entretienNorm = normalize(entretien);
                         const isActive = !exclusions.has(entretienNorm);
-                        await insertStmt.run(category, entretien, isActive ? 1 : 0);
+                        statements.push({
+                            sql: 'INSERT OR IGNORE INTO category_entretiens (category, entretien, is_active) VALUES (?, ?, ?)',
+                            args: [category, entretien, isActive ? 1 : 0]
+                        });
                     }
                 }
-                await insertStmt.finalize();
-                await db.run('COMMIT');
+                
+                if (statements.length > 0) {
+                    await db.batch(statements);
+                }
                 messages.push('Table category_entretiens created and populated.');
             } catch (error: any) {
                 messages.push(`Category/Entretien setup error: ${error.message}`);
             }
             
             try {
-                await db.exec(`
+                await runQuery(db, `
                     CREATE TABLE IF NOT EXISTS weekly_reports (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         start_date TEXT NOT NULL,
@@ -393,13 +408,12 @@ export async function initializeDatabase() {
             }
 
             try {
-                await db.exec(`
+                await runQuery(db, `
                     CREATE TABLE IF NOT EXISTS declarations (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         operation_id INTEGER NOT NULL,
                         generated_at TEXT NOT NULL,
-                        report_data_json TEXT NOT NULL,
-                        FOREIGN KEY (operation_id) REFERENCES suivi_curatif(id)
+                        report_data_json TEXT NOT NULL
                     )
                 `);
                 messages.push('Table declarations created.');
@@ -408,7 +422,7 @@ export async function initializeDatabase() {
             }
 
             try {
-                await db.exec(`
+                await runQuery(db, `
                     CREATE TABLE IF NOT EXISTS stock_entries (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         date TEXT NOT NULL,
@@ -423,7 +437,7 @@ export async function initializeDatabase() {
             }
 
             try {
-                await db.exec(`
+                await runQuery(db, `
                     CREATE TABLE IF NOT EXISTS bons_de_sortie (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         date TEXT NOT NULL,
@@ -441,28 +455,25 @@ export async function initializeDatabase() {
             }
 
             try {
-                await db.exec('BEGIN TRANSACTION');
                 // For joins and lookups by matricule
-                await db.exec('CREATE INDEX IF NOT EXISTS idx_matrice_matricule ON matrice(matricule)');
-                await db.exec('CREATE INDEX IF NOT EXISTS idx_suivi_curatif_matricule ON suivi_curatif(matricule)');
-                await db.exec('CREATE INDEX IF NOT EXISTS idx_consolide_matricule ON consolide(matricule)');
-                await db.exec('CREATE INDEX IF NOT EXISTS idx_vidange_matricule ON vidange(matricule)');
+                await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_matrice_matricule ON matrice(matricule)');
+                await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_suivi_curatif_matricule ON suivi_curatif(matricule)');
+                await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_consolide_matricule ON consolide(matricule)');
+                await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_vidange_matricule ON vidange(matricule)');
 
                 // For sorting operations by date
-                await db.exec('CREATE INDEX IF NOT EXISTS idx_suivi_curatif_date_iso_sort ON suivi_curatif(date_iso DESC, id DESC)');
+                await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_suivi_curatif_date_iso_sort ON suivi_curatif(date_iso DESC, id DESC)');
                 
                 // For filtering and sorting consumptions by date
-                await db.exec('CREATE INDEX IF NOT EXISTS idx_consolide_date_iso_sort ON consolide(date_iso)');
+                await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_consolide_date_iso_sort ON consolide(date_iso)');
                 
                 // For other frequently accessed/sorted tables
-                await db.exec('CREATE INDEX IF NOT EXISTS idx_declarations_operation_id ON declarations(operation_id)');
-                await db.exec('CREATE INDEX IF NOT EXISTS idx_bons_de_sortie_generated_at ON bons_de_sortie(generated_at DESC)');
-                await db.exec('CREATE INDEX IF NOT EXISTS idx_stock_entries_date ON stock_entries(date DESC)');
+                await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_declarations_operation_id ON declarations(operation_id)');
+                await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_bons_de_sortie_generated_at ON bons_de_sortie(generated_at DESC)');
+                await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_stock_entries_date ON stock_entries(date DESC)');
 
-                await db.exec('COMMIT');
                 messages.push('Database indexes created for performance optimization.');
             } catch (error: any) {
-                await db.exec('ROLLBACK');
                 messages.push(`Index creation failed: ${error.message}`);
             }
 
@@ -476,8 +487,8 @@ export async function initializeDatabase() {
 export async function getEquipmentCount(): Promise<number> {
     return withDb(async (db) => {
         try {
-            const result = await db.get('SELECT COUNT(*) as count FROM matrice');
-            return result.count || 0;
+            const result = await getOne(db, 'SELECT COUNT(*) as count FROM matrice');
+            return (result as any)?.count || 0;
         } catch (e: any) {
             console.error("Failed to get equipment count:", e.message);
             return 0;
@@ -488,11 +499,11 @@ export async function getEquipmentCount(): Promise<number> {
 export async function getOperationCountForYear(year: number): Promise<number> {
   return withDb(async (db) => {
     try {
-      const result = await db.get(
+      const result = await getOne(db,
         "SELECT COUNT(*) as count FROM suivi_curatif WHERE substr(date_iso, 1, 4) = ?",
         [year.toString()]
       );
-      return result.count || 0;
+      return (result as any)?.count || 0;
     } catch (e: any) {
       console.error(`Failed to get operation count for year ${year}:`, e.message);
       return 0;
@@ -503,7 +514,7 @@ export async function getOperationCountForYear(year: number): Promise<number> {
 export async function getRecentOperations(limit = 5): Promise<any[]> {
     return withDb(async (db) => {
         try {
-            const rows = await db.all(`
+            const rows = await getQuery(db, `
             SELECT 
                 sc.*,
                 m.designation
@@ -512,7 +523,7 @@ export async function getRecentOperations(limit = 5): Promise<any[]> {
             ORDER BY sc.date_iso DESC, sc.id DESC
             LIMIT ?
             `, [limit]);
-            return rows.map(row => ({
+            return rows.map((row: any) => ({
                 ...row,
                 operation: row.panne_declaree || row.pieces || 'Opération non spécifiée',
             }));
@@ -526,10 +537,10 @@ export async function getRecentOperations(limit = 5): Promise<any[]> {
 export async function getAllEquipment(): Promise<any[]> {
     try {
         return await withDb(async (db) => {
-            return await db.all('SELECT * FROM matrice');
+            return await getQuery(db, 'SELECT * FROM matrice');
         });
     } catch (e: any) {
-        if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+        if (e.message?.includes('no such table')) {
             console.warn("Table 'matrice' not found. The database might not be initialized.");
         } else {
             console.error("An error occurred in getAllEquipment:", e.message);
@@ -541,7 +552,7 @@ export async function getAllEquipment(): Promise<any[]> {
 export async function getAllOperations(): Promise<any[]> {
     try {
         return await withDb(async (db) => {
-            const rows = await db.all(`
+            const rows = await getQuery(db, `
             SELECT 
                 sc.*,
                 m.designation
@@ -550,7 +561,7 @@ export async function getAllOperations(): Promise<any[]> {
             ORDER BY sc.date_iso DESC, sc.id DESC
             `);
             
-            return rows.map(row => ({
+            return rows.map((row: any) => ({
                 ...row,
                 operation: row.panne_declaree || row.pieces || 'Opération non spécifiée',
                 date_programmee: row.date_entree,
@@ -560,7 +571,7 @@ export async function getAllOperations(): Promise<any[]> {
             }));
         });
     } catch (e: any) {
-        if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+        if (e.message?.includes('no such table')) {
             console.warn("Table 'suivi_curatif' or 'declarations' not found. The database might not be initialized.");
         } else {
             console.error("An error occurred in getAllOperations:", e.message);
@@ -569,9 +580,9 @@ export async function getAllOperations(): Promise<any[]> {
     }
 }
 
-const createHistoryCacheTable = async (db: Awaited<ReturnType<typeof getDb>>): Promise<string> => {
+const createHistoryCacheTable = async (db: DbClient): Promise<string> => {
     try {
-        await db.exec(`
+        await runQuery(db, `
             CREATE TABLE IF NOT EXISTS history_cache (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 matricule TEXT,
@@ -581,7 +592,7 @@ const createHistoryCacheTable = async (db: Awaited<ReturnType<typeof getDb>>): P
                 source TEXT
             )
         `);
-        await db.exec('CREATE INDEX IF NOT EXISTS idx_history_cache_matricule ON history_cache(matricule)');
+        await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_history_cache_matricule ON history_cache(matricule)');
         return 'Table history_cache created or verified successfully.';
     } catch(error: any) {
         throw new Error(`Failed to create history_cache table: ${error.message}`);
@@ -621,8 +632,8 @@ export async function generateHistoryMatrix() {
       }[] = [];
 
       // 1. CURATIF
-      const suiviData = await db.all('SELECT matricule, date_entree, panne_declaree, pieces FROM suivi_curatif');
-      for (const row of suiviData) {
+      const suiviData = await getQuery(db, 'SELECT matricule, date_entree, panne_declaree, pieces FROM suivi_curatif');
+      for (const row of suiviData as any[]) {
           const matricule = row.matricule?.toString().trim();
           const date = parseDateSafe(row.date_entree);
           if (!matricule || !date) continue;
@@ -646,8 +657,8 @@ export async function generateHistoryMatrix() {
       }
 
       // 2. VIDANGE
-      const vidanges = await db.all('SELECT * FROM vidange');
-      for (const row of vidanges) {
+      const vidanges = await getQuery(db, 'SELECT * FROM vidange');
+      for (const row of vidanges as any[]) {
           const matricule = row.matricule?.toString().trim();
           const dateStr = getVal(row, 'date', 'date_entretien');
           const date = parseDateSafe(dateStr);
@@ -675,8 +686,8 @@ export async function generateHistoryMatrix() {
       }
 
       // 3. CONSOLIDE
-      const consolideData = await db.all('SELECT * FROM consolide');
-      for (const row of consolideData) {
+      const consolideData = await getQuery(db, 'SELECT * FROM consolide');
+      for (const row of consolideData as any[]) {
           const matricule = row.matricule?.toString().trim();
           if (!matricule) continue;
       
@@ -718,14 +729,12 @@ export async function generateHistoryMatrix() {
       
       // 4. SAUVEGARDE
       if (allOperations.length) {
-          await db.run('DELETE FROM history_cache');
-          const stmt = await db.prepare(`INSERT INTO history_cache (matricule, operation, date, releve_compteur, source) VALUES (?, ?, ?, ?, ?)`);
-          await db.run('BEGIN TRANSACTION');
-          for (const o of allOperations) {
-              await stmt.run(o.matricule, o.operation, o.date, o.releve, o.source);
-          }
-          await stmt.finalize();
-          await db.run('COMMIT');
+          await runQuery(db, 'DELETE FROM history_cache');
+          const statements = allOperations.map(o => ({
+              sql: `INSERT INTO history_cache (matricule, operation, date, releve_compteur, source) VALUES (?, ?, ?, ?, ?)`,
+              args: [o.matricule, o.operation, o.date, o.releve, o.source]
+          }));
+          await db.batch(statements);
           console.log(`[generateHistoryMatrix] Sauvegardé ${allOperations.length} opérations dans history_cache.`);
       }
       
@@ -733,9 +742,9 @@ export async function generateHistoryMatrix() {
   });
 }
   
-export async function getHistoryMatrixFromCache(dbInstance?: Database) {
-    const process = async (db: Database) => {
-        const allOperations = await db.all('SELECT * FROM history_cache');
+export async function getHistoryMatrixFromCache(dbInstance?: DbClient) {
+    const process = async (db: DbClient) => {
+        const allOperations = await getQuery(db, 'SELECT * FROM history_cache') as any[];
 
         // --- Calculate Counts ---
         const counts: Record<string, number> = {};
@@ -815,9 +824,9 @@ export async function getHistoryMatrixFromCache(dbInstance?: Database) {
 }
 
 
-const createPlanningCacheTable = async (db: Awaited<ReturnType<typeof getDb>>): Promise<string> => {
+const createPlanningCacheTable = async (db: DbClient): Promise<string> => {
   try {
-    await db.exec(`
+    await runQuery(db, `
       CREATE TABLE IF NOT EXISTS planning_cache (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         year INTEGER,
@@ -829,9 +838,9 @@ const createPlanningCacheTable = async (db: Awaited<ReturnType<typeof getDb>>): 
         niveau TEXT
       )
     `);
-    await db.exec('CREATE INDEX IF NOT EXISTS idx_planning_year ON planning_cache(year)');
-    await db.exec('CREATE INDEX IF NOT EXISTS idx_planning_mat ON planning_cache(matricule)');
-    await db.exec('CREATE INDEX IF NOT EXISTS idx_planning_date ON planning_cache(date_programmee)');
+    await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_planning_year ON planning_cache(year)');
+    await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_planning_mat ON planning_cache(matricule)');
+    await runQuery(db, 'CREATE INDEX IF NOT EXISTS idx_planning_date ON planning_cache(date_programmee)');
     return 'Table planning_cache created or verified successfully.';
   } catch (error: any) {
     throw new Error(`Failed to create planning_cache table: ${error.message}`);
@@ -841,7 +850,7 @@ const createPlanningCacheTable = async (db: Awaited<ReturnType<typeof getDb>>): 
 export async function getHistoryForEquipment(matricule: string): Promise<any[]> {
     try {
         return await withDb(async (db) => {
-            const operations = await db.all('SELECT * FROM history_cache WHERE matricule = ?', [matricule]);
+            const operations = await getQuery(db, 'SELECT * FROM history_cache WHERE matricule = ?', [matricule]) as any[];
             return operations.map((op, index) => ({
                 id: op.id || index,
                 matricule: op.matricule,
@@ -859,50 +868,35 @@ export async function getHistoryForEquipment(matricule: string): Promise<any[]> 
     }
 }
 
-const savePlanningToDb = async (db: Database, year: number, data: any[]) => {
+const savePlanningToDb = async (db: DbClient, year: number, data: any[]) => {
     if (!data || data.length === 0) {
       console.log(`[SAVE] Aucune donnée à sauvegarder pour l'année ${year}.`);
       return;
     }
     
-    await db.run(`DELETE FROM planning_cache WHERE year = ?`, [year]);
-    const stmt = await db.prepare(`
-        INSERT INTO planning_cache
-            (year, matricule, categorie, entretien, date_programmee, intervalle, niveau)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
+    await runQuery(db, `DELETE FROM planning_cache WHERE year = ?`, [year]);
+    
+    const statements = data.map(r => ({
+        sql: `INSERT INTO planning_cache (year, matricule, categorie, entretien, date_programmee, intervalle, niveau) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        args: [year, r.matricule, r.categorie, r.entretien, r.date_programmee, r.intervalle, r.niveau]
+    }));
 
-    await db.run('BEGIN TRANSACTION');
-    for (const r of data) {
-        await stmt.run(
-            year,
-            r.matricule,
-            r.categorie,
-            r.entretien,
-            r.date_programmee,
-            r.intervalle,
-            r.niveau
-        );
-    }
-    await stmt.finalize();
-    await db.run('COMMIT');
+    await db.batch(statements);
     console.log(`[SAVE] ${data.length} entrées sauvegardées pour l'année ${year}.`);
 };
 
 export const generatePlanning = async (year: number) => {
     return withDb(async (db) => {
-        const [matrice, paramsRaw, fullHistory] = await Promise.all([
-            db.all('SELECT matricule, categorie FROM matrice'),
-            db.all('SELECT * FROM param'),
-            db.all('SELECT matricule, operation, MAX(date) as last_date FROM history_cache GROUP BY matricule, operation')
-        ]);
+        const matrice = await getQuery(db, 'SELECT matricule, categorie FROM matrice') as any[];
+        const paramsRaw = await getQuery(db, 'SELECT * FROM param') as any[];
+        const fullHistory = await getQuery(db, 'SELECT matricule, operation, MAX(date) as last_date FROM history_cache GROUP BY matricule, operation') as any[];
 
         const allowedEntretiensByCategory: Record<string, Set<string>> = {};
-        const hasCategoryRules = (await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='category_entretiens'")) !== undefined;
+        const hasCategoryRules = await getOne(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='category_entretiens'") !== undefined;
 
         if (hasCategoryRules) {
             try {
-                const allowedRows = await db.all('SELECT category, entretien FROM category_entretiens WHERE is_active = 1');
+                const allowedRows = await getQuery(db, 'SELECT category, entretien FROM category_entretiens WHERE is_active = 1') as any[];
                 for (const row of allowedRows) {
                     const categoryNorm = normalize(row.category).replace(/,/g, '');
                     if (!allowedEntretiensByCategory[categoryNorm]) {
@@ -1038,9 +1032,10 @@ export const generatePlanning = async (year: number) => {
     });
 };
 
-const createPlanningMatrix = async (db: Database, year: number, filter = '', page = 1, pageSize = 1, forExport = false, applyFollowUp = false) => {
+const createPlanningMatrix = async (db: DbClient, year: number, filter = '', page = 1, pageSize = 1, forExport = false, applyFollowUp = false) => {
     const allMatriculesQuery = `SELECT DISTINCT matricule FROM matrice WHERE matricule IS NOT NULL AND matricule != '' ORDER BY matricule`;
-    const allMatricules = (await db.all(allMatriculesQuery)).map(m => m.matricule);
+    const allMatriculesRows = await getQuery(db, allMatriculesQuery) as any[];
+    const allMatricules = allMatriculesRows.map(m => m.matricule);
     
     let filteredMatricules = allMatricules;
     if (filter) {
@@ -1055,15 +1050,17 @@ const createPlanningMatrix = async (db: Database, year: number, filter = '', pag
     }
 
     const matriculePlaceholders = paginatedMatricules.map(() => '?').join(',');
+    const interventionsParams = [year, ...paginatedMatricules];
 
     const interventionsQuery = `
         SELECT id, matricule, entretien, date_programmee, niveau 
         FROM planning_cache 
         WHERE year = ? AND matricule IN (${matriculePlaceholders})
     `;
-    const interventionsParams = [year, ...paginatedMatricules];
+    
+    const interventionsRows = await getQuery(db, interventionsQuery, interventionsParams) as any[];
 
-    const curativeOps = applyFollowUp ? await db.all('SELECT matricule, date_entree, date_sortie FROM suivi_curatif') : [];
+    const curativeOps = applyFollowUp ? await getQuery(db, 'SELECT matricule, date_entree, date_sortie FROM suivi_curatif') as any[] : [];
     const breakdownIntervals: { [matricule: string]: { start: dayjs.Dayjs, end: dayjs.Dayjs }[] } = {};
     const today = dayjs();
 
@@ -1081,7 +1078,7 @@ const createPlanningMatrix = async (db: Database, year: number, filter = '', pag
         }
     }
     
-    let processedInterventions = (await db.all(interventionsQuery, interventionsParams)).map(inv => {
+    let processedInterventions = interventionsRows.map(inv => {
         const plannedDate = dayjs(inv.date_programmee, 'DD/MM/YYYY');
         let inBreakdown = false;
         if (applyFollowUp) {
@@ -1281,14 +1278,14 @@ export const getFollowUpMatrixForExport = async (
 
 export const getAllPlanning = async () => {
     return withDb(async (db) => {
-        return await db.all(`SELECT * FROM planning_cache ORDER BY year, substr(date_programmee, 7, 4), substr(date_programmee, 4, 2), substr(date_programmee, 1, 2)`);
+        return await getQuery(db, `SELECT * FROM planning_cache ORDER BY year, substr(date_programmee, 7, 4), substr(date_programmee, 4, 2), substr(date_programmee, 1, 2)`);
     });
 };
 
 export const getPreventativeHistoryForEquipment = async (matricule: string) => {
   return withDb(async (db) => {
     const preventativeEntries: PreventativeMaintenanceEntry[] = [];
-    const consolideData = await db.all('SELECT * FROM consolide WHERE matricule = ?', [matricule]);
+    const consolideData = await getQuery(db, 'SELECT * FROM consolide WHERE matricule = ?', [matricule]) as any[];
     const oilColumns = ['t32', '10w', '15w40', '90', '15w40_v', 'hvol', 'tvol', 't30', 'graisse', 't46', '15w40_quartz'];
 
     for (const row of consolideData) {
@@ -1328,7 +1325,7 @@ export const getPreventativeHistoryForEquipment = async (matricule: string) => {
         });
     }
 
-    const vidangeData = await db.all('SELECT * FROM vidange WHERE matricule = ?', [matricule]);
+    const vidangeData = await getQuery(db, 'SELECT * FROM vidange WHERE matricule = ?', [matricule]) as any[];
     for (const row of vidangeData) {
       const dateStr = getVal(row, 'date', 'date_entretien');
       const date = parseDateSafe(dateStr);
@@ -1373,7 +1370,7 @@ export const getPreventativeHistoryForEquipment = async (matricule: string) => {
 
 export async function getCurativeHistoryForEquipment(matricule: string): Promise<CurativeMaintenanceEntry[]> {
   return withDb(async (db) => {
-      const rows = await db.all('SELECT * FROM suivi_curatif WHERE matricule = ? ORDER BY id DESC', [matricule]);
+      const rows = await getQuery(db, 'SELECT * FROM suivi_curatif WHERE matricule = ? ORDER BY id DESC', [matricule]) as any[];
 
       const parsePieces = (text: string | null): string[] => {
           if (!text) return [];
@@ -1437,10 +1434,10 @@ export async function getCurativeHistoryForEquipment(matricule: string): Promise
 export async function getEquipmentDetails(matricule: string) {
     try {
         return await withDb(async (db) => {
-            return await db.get('SELECT * FROM matrice WHERE matricule = ?', [matricule]);
+            return await getOne(db, 'SELECT * FROM matrice WHERE matricule = ?', [matricule]);
         });
     } catch(e: any) {
-        if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+        if (e.message?.includes('no such table')) {
             console.warn(`Table 'matrice' not found for getEquipmentDetails. DB not initialized?`);
         } else {
             console.error(`Could not get details for equipment ${matricule}`, e);
@@ -1453,12 +1450,12 @@ export async function getEquipmentDynamicStatus(matricule: string): Promise<'En 
     try {
         return await withDb(async (db) => {
             try {
-                const lastIntervention = await db.get(
+                const lastIntervention = await getOne(db,
                     `SELECT date_sortie FROM suivi_curatif WHERE matricule = ? 
                      ORDER BY date_iso DESC, id DESC 
                      LIMIT 1`,
                     [matricule]
-                );
+                ) as any;
 
                 if (!lastIntervention) {
                     return 'Actif';
@@ -1471,7 +1468,7 @@ export async function getEquipmentDynamicStatus(matricule: string): Promise<'En 
                 return 'En Marche';
 
             } catch (e: any) {
-                 if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+                 if (e.message?.includes('no such table')) {
                     return 'Actif';
                 }
                 console.error(`Could not determine dynamic status for ${matricule}`, e);
@@ -1488,9 +1485,9 @@ export async function getSuiviCuratifRaw() {
     return withDb(async (db) => {
         try {
             // We select all columns to provide a raw view, limited to the last 50 entries for performance.
-            return await db.all('SELECT * FROM suivi_curatif ORDER BY id DESC LIMIT 50');
+            return await getQuery(db, 'SELECT * FROM suivi_curatif ORDER BY id DESC LIMIT 50');
         } catch (e: any) {
-            if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+            if (e.message?.includes('no such table')) {
                 console.warn("Table 'suivi_curatif' not found. The database might not be initialized.");
                 return [];
             }
@@ -1502,7 +1499,7 @@ export async function getSuiviCuratifRaw() {
 export async function getAllPlanningForYear(year: number) {
     return withDb(async (db) => {
         try {
-            return await db.all(`
+            return await getQuery(db, `
                 SELECT 
                     pc.matricule, 
                     m.designation,
@@ -1514,7 +1511,7 @@ export async function getAllPlanningForYear(year: number) {
                 WHERE pc.year = ?
             `, [year]);
         } catch (e: any) {
-            if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+            if (e.message?.includes('no such table')) {
                 console.warn("Table 'planning_cache' or 'matrice' not found. The database might not be initialized.");
                 return [];
             }
@@ -1526,9 +1523,9 @@ export async function getAllPlanningForYear(year: number) {
 export async function getParams() {
   return withDb(async (db) => {
     try {
-      return await db.all('SELECT * FROM param ORDER BY id');
+      return await getQuery(db, 'SELECT * FROM param ORDER BY id');
     } catch (e: any) {
-      if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+      if (e.message?.includes('no such table')) {
         console.warn("Table 'Param' not found. The database might not be initialized.");
         return [];
       }
@@ -1539,24 +1536,17 @@ export async function getParams() {
 
 export async function updateParam(id: number, column: string, value: string | null) {
   return withDb(async (db) => {
-    const info = await db.all(`PRAGMA table_info(Param)`);
-    const allowedColumns = info.map(col => col.name);
+    const info = await getQuery(db, `PRAGMA table_info(Param)`) as any[];
+    const allowedColumns = info.map((col: any) => col.name);
 
     if (!allowedColumns.includes(column)) {
       throw new Error(`Invalid column name provided: ${column}`);
     }
 
-    const result = await db.run(
-      `UPDATE Param SET "${column}" = ? WHERE id = ?`,
-      [value, id]
-    );
-
-    if (result.changes === 0) {
-      console.warn(`No rows updated for param id ${id}.`);
-    }
+    const result = await runQuery(db, `UPDATE Param SET "${column}" = ? WHERE id = ?`, [value, id]);
 
     try {
-        await db.run('DELETE FROM planning_cache');
+        await runQuery(db, 'DELETE FROM planning_cache');
         console.log('Planning cache cleared due to parameter update.');
     } catch (e) {
         console.log('Could not clear planning cache (it may not exist yet).');
@@ -1566,11 +1556,11 @@ export async function updateParam(id: number, column: string, value: string | nu
   });
 }
 
-async function getProcessedHistory(db: Database, year: number): Promise<{ id: number, matricule: string, operation: string, date: dayjs.Dayjs, releve: number | null }[]> {
-    const historyData = await db.all(
+async function getProcessedHistory(db: DbClient, year: number): Promise<{ id: number, matricule: string, operation: string, date: dayjs.Dayjs, releve: number | null }[]> {
+    const historyData = await getQuery(db,
         "SELECT id, matricule, operation, date, releve_compteur FROM history_cache WHERE substr(date, 7, 4) = ?",
         [year.toString()]
-    );
+    ) as any[];
     
     return historyData.map(record => ({
         id: record.id,
@@ -1585,10 +1575,10 @@ async function getProcessedHistory(db: Database, year: number): Promise<{ id: nu
 export async function getFollowUpStatistics(year: number) {
   try {
     return await withDb(async (db) => {
-        const plannedInterventions = await db.all(
+        const plannedInterventions = await getQuery(db,
             'SELECT matricule, entretien, niveau FROM planning_cache WHERE year = ?',
             [year]
-        );
+        ) as any[];
         const realizedInterventions = await getProcessedHistory(db, year);
 
         const plannedCounts: { [key: string]: number } = {};
@@ -1640,7 +1630,7 @@ export async function getFollowUpStatistics(year: number) {
         };
     });
   } catch (e: any) {
-     if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+     if (e.message?.includes('no such table')) {
         console.warn("A required table for stats was not found. DB might not be initialized.");
         return null;
       }
@@ -1651,10 +1641,10 @@ export async function getFollowUpStatistics(year: number) {
 export async function getDistinctCategories() {
     return withDb(async (db) => {
         try {
-            const rows = await db.all('SELECT DISTINCT categorie FROM matrice');
+            const rows = await getQuery(db, 'SELECT DISTINCT categorie FROM matrice') as any[];
             return rows.map(r => r.categorie).filter(Boolean).sort();
         } catch (e: any) {
-            if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+            if (e.message?.includes('no such table')) {
                 console.warn("Table 'matrice' not found.");
             } else {
                 console.error("An error occurred in getDistinctCategories:", e.message);
@@ -1667,7 +1657,7 @@ export async function getDistinctCategories() {
 export async function getCategoryEntretiens() {
     return withDb(async (db) => {
         try {
-            const rows = await db.all('SELECT category, entretien, is_active FROM category_entretiens');
+            const rows = await getQuery(db, 'SELECT category, entretien, is_active FROM category_entretiens') as any[];
             const data: Record<string, Record<string, boolean>> = {};
             for (const row of rows) {
                 if (!data[row.category]) {
@@ -1677,7 +1667,7 @@ export async function getCategoryEntretiens() {
             }
             return data;
         } catch (e: any) {
-             if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+             if (e.message?.includes('no such table')) {
                 console.warn("Table 'category_entretiens' not found.");
             } else {
                 console.error("An error occurred in getCategoryEntretiens:", e.message);
@@ -1689,20 +1679,21 @@ export async function getCategoryEntretiens() {
 
 export async function updateCategoryEntretiens(category: string, entretien: string, isActive: boolean) {
     return withDb(async (db) => {
-        const result = await db.run(
+        const result = await runQuery(db,
             'UPDATE category_entretiens SET is_active = ? WHERE category = ? AND entretien = ?',
             [isActive ? 1 : 0, category, entretien]
         );
-         if (result.changes === 0) {
-          // If no rows were updated, it might be a new category. Try inserting.
-          await db.run(
+        
+        // Try inserting if no rows were updated
+        if ((result as any).changes === 0) {
+          await runQuery(db,
             'INSERT OR IGNORE INTO category_entretiens (category, entretien, is_active) VALUES (?, ?, ?)',
             [category, entretien, isActive ? 1 : 0]
-          )
+          );
         }
 
         try {
-            await db.run('DELETE FROM planning_cache');
+            await runQuery(db, 'DELETE FROM planning_cache');
             console.log('Planning cache cleared due to category parameter update.');
         } catch (e) {
             console.log('Could not clear planning cache (it may not exist yet).');
@@ -1713,7 +1704,7 @@ export async function updateCategoryEntretiens(category: string, entretien: stri
 
 export async function addCurativeOperationToDb(operationData: any) {
   return withDb(async (db) => {
-    const equipment = await db.get('SELECT categorie, designation FROM matrice WHERE matricule = ?', [operationData.matricule]);
+    const equipment = await getOne(db, 'SELECT categorie, designation FROM matrice WHERE matricule = ?', [operationData.matricule]) as any;
 
     if (!equipment) {
         throw new Error(`Matricule '${operationData.matricule}' non trouvé dans la table des équipements.`);
@@ -1740,31 +1731,30 @@ export async function addCurativeOperationToDb(operationData: any) {
 
     const values = columns.map(col => fullOperationData[col] ?? null);
 
-    const result = await db.run(sql, values);
+    const result = await runQuery(db, sql, values);
+    const lastID = Number((result as any).lastInsertRowid);
 
     // Also add to history cache for immediate availability in other views
-    if (result.lastID && fullOperationData.pieces) {
+    if (lastID && fullOperationData.pieces) {
         const piecesList = fullOperationData.pieces.toLowerCase().split('-').map((p: string) => p.trim()).filter(Boolean);
         const releve = extraireReleve(fullOperationData.panne_declaree);
-        const insertHistoryStmt = await db.prepare(`INSERT INTO history_cache (matricule, operation, date, releve_compteur, source) VALUES (?, ?, ?, ?, ?)`);
-
+        
+        const statements = [];
         for (const piece of piecesList) {
             const matchedEntretien = findMatchedEntretien(piece);
            if (matchedEntretien) {
-                await insertHistoryStmt.run(
-                    fullOperationData.matricule, 
-                    matchedEntretien, 
-                    fullOperationData.date_entree, 
-                    releve, 
-                    'suivi_curatif_new'
-                );
+                statements.push({
+                    sql: `INSERT INTO history_cache (matricule, operation, date, releve_compteur, source) VALUES (?, ?, ?, ?, ?)`,
+                    args: [fullOperationData.matricule, matchedEntretien, fullOperationData.date_entree, releve, 'suivi_curatif_new']
+                });
            }
         }
-        await insertHistoryStmt.finalize();
+        if (statements.length > 0) {
+            await db.batch(statements);
+        }
     }
 
-
-    return { id: result.lastID };
+    return { id: lastID };
   });
 }
 
@@ -1786,7 +1776,7 @@ export async function generateAndSaveWeeklyReport(targetDate?: Date) {
 
     const searchEndDate = endOfWeek.format('YYYY-MM-DD');
 
-    const allPannesFromDb = await db.all(`
+    const allPannesFromDb = await getQuery(db, `
       SELECT 
         m.designation, 
         sc.id as operation_id,
@@ -1799,7 +1789,7 @@ export async function generateAndSaveWeeklyReport(targetDate?: Date) {
       FROM suivi_curatif sc
       LEFT JOIN matrice m ON sc.matricule = m.matricule
       WHERE sc.date_iso <= ?
-    `, [searchEndDate]);
+    `, [searchEndDate]) as any[];
 
     const allReportPannes: WeeklyReportItem[] = [];
 
@@ -1868,19 +1858,19 @@ export async function generateAndSaveWeeklyReport(targetDate?: Date) {
       pannes: allReportPannes
     };
 
-    const result = await db.run(
+    const result = await runQuery(db,
       `INSERT INTO weekly_reports (start_date, end_date, generated_at, report_data_json) VALUES (?, ?, ?, ?)`,
       [reportData.start_date, reportData.end_date, reportData.generated_at, JSON.stringify(reportData.pannes)]
     );
 
-    return result.lastID;
+    return Number((result as any).lastInsertRowid);
   });
 }
 
 export async function getWeeklyReports() {
     return withDb(async (db) => {
         try {
-            return await db.all('SELECT id, start_date, end_date, generated_at FROM weekly_reports ORDER BY generated_at DESC');
+            return await getQuery(db, 'SELECT id, start_date, end_date, generated_at FROM weekly_reports ORDER BY generated_at DESC');
         } catch (e) {
             console.error("Failed to get weekly reports list", e);
             return [];
@@ -1891,7 +1881,7 @@ export async function getWeeklyReports() {
 export async function getWeeklyReport(id: number): Promise<WeeklyReport | null> {
      return withDb(async (db) => {
         try {
-            const row = await db.get('SELECT * FROM weekly_reports WHERE id = ?', id);
+            const row = await getOne(db, 'SELECT * FROM weekly_reports WHERE id = ?', [id]) as any;
             if (!row) return null;
 
             return {
@@ -1911,10 +1901,7 @@ export async function getWeeklyReport(id: number): Promise<WeeklyReport | null> 
 
 export async function deleteWeeklyReport(id: number) {
     return withDb(async (db) => {
-        const result = await db.run('DELETE FROM weekly_reports WHERE id = ?', [id]);
-        if (result.changes === 0) {
-            console.warn(`Attempted to delete report with id ${id}, but it was not found.`);
-        }
+        await runQuery(db, 'DELETE FROM weekly_reports WHERE id = ?', [id]);
         return { success: true };
     });
 }
@@ -1923,7 +1910,7 @@ export async function getMonthlyCurativeCounts(year?: number): Promise<MonthlyCo
   const targetYear = (year || new Date().getFullYear()).toString();
   return withDb(async (db) => {
     try {
-      const rows = await db.all(`
+      const rows = await getQuery(db, `
         SELECT
           substr(date_iso, 6, 2) as month,
           COUNT(*) as count
@@ -1931,7 +1918,7 @@ export async function getMonthlyCurativeCounts(year?: number): Promise<MonthlyCo
         WHERE substr(date_iso, 1, 4) = ?
         GROUP BY month
         ORDER BY month
-      `, [targetYear]);
+      `, [targetYear]) as any[];
 
       const monthMap = new Map(rows.map(r => [r.month, r.count]));
 
@@ -1975,7 +1962,7 @@ export async function getMonthlyPreventativeStats(year: number, month?: number):
                 query += ` AND substr(date_iso, 6, 2) = ?`;
                 params.push(month.toString().padStart(2, '0'));
             }
-            const rows = await db.all(query, params);
+            const rows = await getQuery(db, query, params) as any[];
 
             const monthlyData = JSON.parse(JSON.stringify(defaultData.monthlyData));
             let totalHuile = 0;
@@ -2040,7 +2027,7 @@ export async function getMonthlyPreventativeStats(year: number, month?: number):
             return { monthlyData, totalOil: totalHuile, oilByType };
         });
     } catch (e: any) {
-        if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+        if (e.message?.includes('no such table')) {
              console.warn("Table 'consolide' not found. The database might not be initialized.");
         } else {
             console.error("Failed to get monthly preventative stats:", e.message);
@@ -2051,12 +2038,12 @@ export async function getMonthlyPreventativeStats(year: number, month?: number):
 
 export async function getOperationById(id: number) {
     return withDb(async (db) => {
-        const row = await db.get(`
+        const row = await getOne(db, `
             SELECT sc.*, m.designation, m.marque, m.categorie
             FROM suivi_curatif sc
             LEFT JOIN matrice m on sc.matricule = m.matricule
             WHERE sc.id = ?
-        `, [id]);
+        `, [id]) as any;
         if (!row) return null;
         return {
             ...row,
@@ -2071,17 +2058,17 @@ export async function getOperationById(id: number) {
 
 export async function saveDeclaration(operationId: number, reportDataJson: string) {
     return withDb(async (db) => {
-        const result = await db.run(
+        const result = await runQuery(db,
             `INSERT INTO declarations (operation_id, generated_at, report_data_json) VALUES (?, ?, ?)`,
             [operationId, dayjs().format(), reportDataJson]
         );
-        return result.lastID;
+        return Number((result as any).lastInsertRowid);
     });
 }
 
 export async function getDeclarationById(id: number): Promise<DeclarationPanne | null> {
     return withDb(async (db) => {
-        const row = await db.get('SELECT * FROM declarations WHERE id = ?', [id]);
+        const row = await getOne(db, 'SELECT * FROM declarations WHERE id = ?', [id]) as any;
         if (!row) return null;
         
         const reportData = JSON.parse(row.report_data_json);
@@ -2106,17 +2093,17 @@ export async function getDeclarationById(id: number): Promise<DeclarationPanne |
 export async function getDeclarationsList() {
     return withDb(async (db) => {
         try {
-            const rows = await db.all(`
+            const rows = await getQuery(db, `
                 SELECT d.id, d.generated_at, s.matricule, s.panne_declaree, m.designation
                 FROM declarations d
                 JOIN suivi_curatif s ON d.operation_id = s.id
                 LEFT JOIN matrice m ON s.matricule = m.matricule
                 ORDER BY d.generated_at DESC
-            `);
+            `) as any[];
             return rows;
         } catch (e: any) {
             console.error("Failed to get declarations list", e);
-            if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+            if (e.message?.includes('no such table')) {
                 return [];
             }
             throw e;
@@ -2126,23 +2113,17 @@ export async function getDeclarationsList() {
 
 export async function deleteDeclarationFromDb(id: number) {
     return withDb(async (db) => {
-        const result = await db.run('DELETE FROM declarations WHERE id = ?', [id]);
-        if (result.changes === 0) {
-            throw new Error(`Declaration with id ${id} not found.`);
-        }
+        await runQuery(db, 'DELETE FROM declarations WHERE id = ?', [id]);
         return { success: true };
     });
 }
 
 export async function updateDeclarationInDb(id: number, reportDataJson: string) {
     return withDb(async (db) => {
-        const result = await db.run(
+        await runQuery(db,
             `UPDATE declarations SET report_data_json = ? WHERE id = ?`,
             [reportDataJson, id]
         );
-        if (result.changes === 0) {
-            throw new Error(`Declaration with id ${id} not found.`);
-        }
         return { success: true };
     });
 }
@@ -2150,7 +2131,7 @@ export async function updateDeclarationInDb(id: number, reportDataJson: string) 
 
 export async function getEquipmentById(id: number) {
   return withDb(async (db) => {
-    return await db.get('SELECT * FROM matrice WHERE id = ?', [id]);
+    return await getOne(db, 'SELECT * FROM matrice WHERE id = ?', [id]);
   });
 }
 
@@ -2160,77 +2141,57 @@ export async function addEquipmentToDb(data: any) {
     const placeholders = columns.map(() => '?').join(', ');
     const sql = `INSERT INTO matrice (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`;
     const values = columns.map(col => data[col] ?? null);
-    const result = await db.run(sql, values);
-    return { id: result.lastID };
+    const result = await runQuery(db, sql, values);
+    return { id: Number((result as any).lastInsertRowid) };
   });
 }
 
 export async function updateEquipmentInDb(id: number, data: any) {
   return withDb(async (db) => {
-    await db.exec('BEGIN TRANSACTION');
-    try {
-      const oldEquipment = await db.get('SELECT matricule FROM matrice WHERE id = ?', [id]);
-      if (!oldEquipment) {
-        throw new Error(`Equipment with id ${id} not found.`);
-      }
-      const oldMatricule = oldEquipment.matricule;
-      const newMatricule = data.matricule;
-
-      const columns = Object.keys(data);
-      const setClause = columns.map(col => `"${col}" = ?`).join(', ');
-      const updateSql = `UPDATE matrice SET ${setClause} WHERE id = ?`;
-      const updateValues = [...columns.map(col => data[col] ?? null), id];
-      const result = await db.run(updateSql, updateValues);
-      
-      if (result.changes === 0) {
-        throw new Error(`Equipment with id ${id} not found during update.`);
-      }
-      
-      let matriculeChanged = false;
-      if (oldMatricule && newMatricule && oldMatricule !== newMatricule) {
-        matriculeChanged = true;
-        const tablesToUpdate = ['suivi_curatif', 'vidange', 'consolide'];
-        for (const table of tablesToUpdate) {
-          await db.run(`UPDATE ${table} SET matricule = ? WHERE matricule = ?`, [newMatricule, oldMatricule]);
-        }
-        await db.run('DELETE FROM history_cache');
-        await db.run('DELETE FROM planning_cache');
-      }
-      
-      await db.exec('COMMIT');
-      return { success: true, matriculeChanged };
-    } catch (error) {
-      await db.exec('ROLLBACK');
-      console.error('Transaction failed in updateEquipmentInDb:', error);
-      throw error;
+    const oldEquipment = await getOne(db, 'SELECT matricule FROM matrice WHERE id = ?', [id]) as any;
+    if (!oldEquipment) {
+      throw new Error(`Equipment with id ${id} not found.`);
     }
+    const oldMatricule = oldEquipment.matricule;
+    const newMatricule = data.matricule;
+
+    const columns = Object.keys(data);
+    const setClause = columns.map(col => `"${col}" = ?`).join(', ');
+    const updateSql = `UPDATE matrice SET ${setClause} WHERE id = ?`;
+    const updateValues = [...columns.map(col => data[col] ?? null), id];
+    await runQuery(db, updateSql, updateValues);
+    
+    let matriculeChanged = false;
+    if (oldMatricule && newMatricule && oldMatricule !== newMatricule) {
+      matriculeChanged = true;
+      const tablesToUpdate = ['suivi_curatif', 'vidange', 'consolide'];
+      for (const table of tablesToUpdate) {
+        await runQuery(db, `UPDATE ${table} SET matricule = ? WHERE matricule = ?`, [newMatricule, oldMatricule]);
+      }
+      await runQuery(db, 'DELETE FROM history_cache');
+      await runQuery(db, 'DELETE FROM planning_cache');
+    }
+    
+    return { success: true, matriculeChanged };
   });
 }
 
 export async function deleteEquipmentFromDb(id: number) {
   return withDb(async (db) => {
-    await db.exec('BEGIN TRANSACTION');
-    try {
-      const equipment = await db.get('SELECT matricule FROM matrice WHERE id = ?', [id]);
-      if (equipment) {
-        const matricule = equipment.matricule;
-        await db.run('DELETE FROM suivi_curatif WHERE matricule = ?', [matricule]);
-        await db.run('DELETE FROM vidange WHERE matricule = ?', [matricule]);
-        await db.run('DELETE FROM consolide WHERE matricule = ?', [matricule]);
-        await db.run('DELETE FROM history_cache WHERE matricule = ?', [matricule]);
-        await db.run('DELETE FROM planning_cache WHERE matricule = ?', [matricule]);
-        
-        await db.run('DELETE FROM matrice WHERE id = ?', [id]);
-      } else {
-        console.warn(`Attempted to delete equipment with id ${id}, but it was not found in 'matrice' table.`);
-      }
-      await db.exec('COMMIT');
-      return { success: true };
-    } catch(error) {
-      await db.exec('ROLLBACK');
-      console.error(`Transaction failed in deleteEquipmentFromDb for id ${id}:`, error);
-      throw error;
+    const equipment = await getOne(db, 'SELECT matricule FROM matrice WHERE id = ?', [id]) as any;
+    if (equipment) {
+      const matricule = equipment.matricule;
+      await runQuery(db, 'DELETE FROM suivi_curatif WHERE matricule = ?', [matricule]);
+      await runQuery(db, 'DELETE FROM vidange WHERE matricule = ?', [matricule]);
+      await runQuery(db, 'DELETE FROM consolide WHERE matricule = ?', [matricule]);
+      await runQuery(db, 'DELETE FROM history_cache WHERE matricule = ?', [matricule]);
+      await runQuery(db, 'DELETE FROM planning_cache WHERE matricule = ?', [matricule]);
+      
+      await runQuery(db, 'DELETE FROM matrice WHERE id = ?', [id]);
+    } else {
+      console.warn(`Attempted to delete equipment with id ${id}, but it was not found in 'matrice' table.`);
     }
+    return { success: true };
   });
 }
 
@@ -2268,9 +2229,9 @@ export async function getCurativeFiches(startDate: string, endDate: string, matr
 
     query += ` ORDER BY sc.date_iso`;
 
-    const rows = await db.all(query, params);
+    const rows = await getQuery(db, query, params) as any[];
     
-    return rows.map(row => ({
+    return rows.map((row: any) => ({
       ...row,
       pieces: row.pieces ? row.pieces.split('-').map((p:string) => p.trim()).filter(Boolean) : [],
     }));
@@ -2306,7 +2267,7 @@ export async function getOrdresDeTravail(startDate: string, endDate: string, mat
 
     query += ` ORDER BY sc.date_iso`;
 
-    const rows = await db.all(query, params);
+    const rows = await getQuery(db, query, params) as any[];
     return rows;
   });
 }
@@ -2331,7 +2292,7 @@ export async function getPreventiveFichesFromDb(startDate: string, endDate: stri
 
         query += ` ORDER BY c.date_iso`;
 
-        const rows = await db.all(query, params);
+        const rows = await getQuery(db, query, params) as any[];
         
         const oilColumnConfig: { [key: string]: { organe: string, travail: string, lubrifiant: string } } = {
             // Vidange Types (check against V)
@@ -2417,7 +2378,7 @@ export async function getPreventiveFichesFromDb(startDate: string, endDate: stri
 export async function getEquipmentForConsumption() {
     return withDb(async (db) => {
         try {
-            return await db.all('SELECT matricule, designation, qte_vidange FROM matrice');
+            return await getQuery(db, 'SELECT matricule, designation, qte_vidange FROM matrice') as any[];
         } catch (e: any) {
             console.error('Failed to get equipment list for consumption form', e);
             return [];
@@ -2454,91 +2415,82 @@ const calculateEntretienServer = (lubricants: Record<string, number>, qteVidange
 export async function addConsolideEntries(date: string, entries: any[]) {
     return withDb(async (db) => {
         const insertColumns = [...CONSOLIDE_COLUMNS_ORDER, 'date_iso'];
-        const placeholders = insertColumns.map(() => '?').join(', ');
         
-        const consolideStmt = await db.prepare(`
-            INSERT INTO consolide (${insertColumns.map(c => `"${c}"`).join(', ')}) 
-            VALUES (${placeholders})
-        `);
+        const statements = [];
+        const historyStatements = [];
 
-        const historyStmt = await db.prepare(`
-            INSERT INTO history_cache (matricule, operation, date, releve_compteur, source) 
-            VALUES (?, ?, ?, ?, ?)
-        `);
+        for (const entry of entries) {
+            const entretien = calculateEntretienServer(entry.lubricants, entry.qte_vidange);
+            
+            const dataMap: { [key: string]: any } = {
+                v: entry.qte_vidange || null,
+                n: null,
+                date: date,
+                date_iso: dayjs(date, 'DD/MM/YYYY').format('YYYY-MM-DD'),
+                designation: entry.designation || null,
+                matricule: entry.matricule,
+                t32: entry.lubricants['t32'] || null,
+                '15w40_4400': entry.lubricants['15w40_4400'] || null,
+                '10w': entry.lubricants['10w'] || null,
+                '15w40': entry.lubricants['15w40'] || null,
+                '90': entry.lubricants['90'] || null,
+                '15w40_v': entry.lubricants['15w40_v'] || null,
+                hvol: entry.lubricants['hvol'] || null,
+                tvol: entry.lubricants['tvol'] || null,
+                t30: entry.lubricants['t30'] || null,
+                graisse: entry.lubricants['graisse'] || null,
+                t46: entry.lubricants['t46'] || null,
+                '15w40_quartz': entry.lubricants['15w40_quartz'] || null,
+                obs: entry.obs || null,
+                entretien: entretien
+            };
+            
+            const values = insertColumns.map(col => dataMap[col]);
+            statements.push({
+                sql: `INSERT INTO consolide (${insertColumns.map(c => `"${c}"`).join(', ')}) VALUES (${insertColumns.map(() => '?').join(', ')})`,
+                args: values
+            });
 
-        await db.run('BEGIN TRANSACTION');
-        try {
-            for (const entry of entries) {
-                
-                const entretien = calculateEntretienServer(entry.lubricants, entry.qte_vidange);
-                
-                const dataMap: { [key: string]: any } = {
-                    v: entry.qte_vidange || null,
-                    n: null,
-                    date: date,
-                    date_iso: dayjs(date, 'DD/MM/YYYY').format('YYYY-MM-DD'),
-                    designation: entry.designation || null,
-                    matricule: entry.matricule,
-                    t32: entry.lubricants['t32'] || null,
-                    '15w40_4400': entry.lubricants['15w40_4400'] || null,
-                    '10w': entry.lubricants['10w'] || null,
-                    '15w40': entry.lubricants['15w40'] || null,
-                    '90': entry.lubricants['90'] || null,
-                    '15w40_v': entry.lubricants['15w40_v'] || null,
-                    hvol: entry.lubricants['hvol'] || null,
-                    tvol: entry.lubricants['tvol'] || null,
-                    t30: entry.lubricants['t30'] || null,
-                    graisse: entry.lubricants['graisse'] || null,
-                    t46: entry.lubricants['t46'] || null,
-                    '15w40_quartz': entry.lubricants['15w40_quartz'] || null,
-                    obs: entry.obs || null,
-                    entretien: entretien
-                };
-                
-                const values = insertColumns.map(col => dataMap[col]);
-                await consolideStmt.run(values);
+            const releve = extraireReleve(entry.obs);
+            const lubricants = entry.lubricants;
+            const qte_vidange = entry.qte_vidange;
 
-                const releve = extraireReleve(entry.obs);
-                const lubricants = entry.lubricants;
-                const qte_vidange = entry.qte_vidange;
+            const addHistory = (op: string) => {
+                historyStatements.push({
+                    sql: `INSERT INTO history_cache (matricule, operation, date, releve_compteur, source) VALUES (?, ?, ?, ?, ?)`,
+                    args: [entry.matricule, op, date, releve, 'consolide_stock']
+                });
+            };
 
-                const addHistory = async (op: string) => {
-                    await historyStmt.run(entry.matricule, op, date, releve, 'consolide_stock');
-                };
-
-                const engineOils = ['15w40', '15w40_v', '15w40_quartz', '15w40_4400'];
-                const totalEngineOil = engineOils.reduce((sum, type) => sum + (lubricants[type] || 0), 0);
-                if (totalEngineOil > 0) {
-                    if (qte_vidange && qte_vidange > 0 && totalEngineOil >= qte_vidange) {
-                        await addHistory('Vidanger le carter moteur');
-                    } else {
-                        await addHistory('Niveau d\'huile du carter');
-                    }
-                }
-                
-                const hydraulicOils = ['10w', 't32', 'hvol', 't46'];
-                const totalHydraulicOil = hydraulicOils.reduce((sum, type) => sum + (lubricants[type] || 0), 0);
-                if (totalHydraulicOil > 0) {
-                    await addHistory('circuit hydraulique');
-                }
-
-                const transmissionOils = ['90', 'tvol', 't30'];
-                const totalTransmissionOil = transmissionOils.reduce((sum, type) => sum + (lubricants[type] || 0), 0);
-                if (totalTransmissionOil > 0) {
-                    await addHistory('boite de vitesse');
-                }
-
-                if ((lubricants['graisse'] || 0) > 0) {
-                    await addHistory('Graissage général');
+            const engineOils = ['15w40', '15w40_v', '15w40_quartz', '15w40_4400'];
+            const totalEngineOil = engineOils.reduce((sum, type) => sum + (lubricants[type] || 0), 0);
+            if (totalEngineOil > 0) {
+                if (qte_vidange && qte_vidange > 0 && totalEngineOil >= qte_vidange) {
+                    addHistory('Vidanger le carter moteur');
+                } else {
+                    addHistory('Niveau d\'huile du carter');
                 }
             }
-            await db.run('COMMIT');
-        } catch (error) {
-            await db.run('ROLLBACK');
-            throw error;
-        } finally {
-            await consolideStmt.finalize();
-            await historyStmt.finalize();
+            
+            const hydraulicOils = ['10w', 't32', 'hvol', 't46'];
+            const totalHydraulicOil = hydraulicOils.reduce((sum, type) => sum + (lubricants[type] || 0), 0);
+            if (totalHydraulicOil > 0) {
+                addHistory('circuit hydraulique');
+            }
+
+            const transmissionOils = ['90', 'tvol', 't30'];
+            const totalTransmissionOil = transmissionOils.reduce((sum, type) => sum + (lubricants[type] || 0), 0);
+            if (totalTransmissionOil > 0) {
+                addHistory('boite de vitesse');
+            }
+
+            if ((lubricants['graisse'] || 0) > 0) {
+                addHistory('Graissage général');
+            }
+        }
+
+        if (statements.length > 0) {
+            await db.batch([...statements, ...historyStatements]);
         }
 
         return { success: true, count: entries.length };
@@ -2558,11 +2510,11 @@ export async function getConsolideByDateRange(startDate: Date, endDate: Date) {
         try {
             // Get consumptions for the selected range
             const consumptionsQuery = `SELECT * FROM consolide WHERE date_iso BETWEEN ? AND ? ORDER BY id DESC`;
-            const filteredConsumptions = await db.all(consumptionsQuery, [startDateString, endDateString]);
+            const filteredConsumptions = await getQuery(db, consumptionsQuery, [startDateString, endDateString]) as any[];
 
             // Get entries for the selected range
             const entriesQuery = `SELECT * FROM stock_entries WHERE date BETWEEN ? AND ?`;
-            const filteredEntries = await db.all(entriesQuery, [startDateString, endDateString]);
+            const filteredEntries = await getQuery(db, entriesQuery, [startDateString, endDateString]) as any[];
 
             // Summarize consumptions for the selected range
             const consumedSummary: Record<string, number> = {};
@@ -2595,14 +2547,14 @@ export async function getConsolideByDateRange(startDate: Date, endDate: Date) {
                 SELECT ${lubricantPlaceholders} 
                 FROM stock_entries
                 WHERE date >= ? AND date < ?`;
-            const initialEntriesResult = await db.get(getInitialEntriesSumQuery, [...LUBRICANT_TYPES, startOfYear.format('YYYY-MM-DD'), startDateString]);
+            const initialEntriesResult = await getOne(db, getInitialEntriesSumQuery, [...LUBRICANT_TYPES, startOfYear.format('YYYY-MM-DD'), startDateString]) as any;
 
             const lubricantSumClauses = LUBRICANT_TYPES.map(type => `SUM(CAST(REPLACE("${type}", ',', '.') as REAL))`).join(', ');
             const getInitialConsumptionsSumQuery = `
                 SELECT ${lubricantSumClauses}
                 FROM consolide
                 WHERE date_iso >= ? AND date_iso < ?`;
-            const initialConsumptionsResult = await db.get(getInitialConsumptionsSumQuery, [startOfYear.format('YYYY-MM-DD'), startDateString]);
+            const initialConsumptionsResult = await getOne(db, getInitialConsumptionsSumQuery, [startOfYear.format('YYYY-MM-DD'), startDateString]) as any;
             
             LUBRICANT_TYPES.forEach((type, index) => {
                 const baseStock = yearInitialStocks[type] || 0;
@@ -2614,7 +2566,7 @@ export async function getConsolideByDateRange(startDate: Date, endDate: Date) {
             return { consumptions: filteredConsumptions, summary: { consumed: consumedSummary, entries: entrySummary }, initialStockSummary };
 
         } catch (e: any) {
-            if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+            if (e.message?.includes('no such table')) {
                 console.warn("Table 'consolide' or 'stock_entries' not found.");
                 return { consumptions: [], summary: { consumed: {}, entries: {} }, initialStockSummary: {} };
             }
@@ -2627,11 +2579,11 @@ export async function getConsolideByDateRange(startDate: Date, endDate: Date) {
 export async function addStockEntryToDb(data: { date: string, lubricant_type: string, quantity: number, reference?: string | null }) {
     return withDb(async (db) => {
         try {
-            const result = await db.run(
+            const result = await runQuery(db,
                 'INSERT INTO stock_entries (date, lubricant_type, quantity, reference) VALUES (?, ?, ?, ?)',
                 [data.date, data.lubricant_type, data.quantity, data.reference]
             );
-            return { id: result.lastID };
+            return { id: Number((result as any).lastInsertRowid) };
         } catch (e: any) {
             console.error("Failed to add stock entry to DB:", e);
             throw e;
@@ -2642,9 +2594,9 @@ export async function addStockEntryToDb(data: { date: string, lubricant_type: st
 export async function getStockEntriesFromDb() {
     return withDb(async (db) => {
         try {
-            return await db.all('SELECT * FROM stock_entries ORDER BY date DESC, id DESC');
+            return await getQuery(db, 'SELECT * FROM stock_entries ORDER BY date DESC, id DESC') as any[];
         } catch (e: any) {
-            if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) {
+            if (e.message?.includes('no such table')) {
                 console.warn("Table 'stock_entries' not found. The database might not be initialized.");
                 return [];
             }
@@ -2656,10 +2608,7 @@ export async function getStockEntriesFromDb() {
 export async function deleteStockEntryFromDb(id: number) {
     return withDb(async (db) => {
         try {
-            const result = await db.run('DELETE FROM stock_entries WHERE id = ?', [id]);
-            if (result.changes === 0) {
-                console.warn(`Attempted to delete stock entry with id ${id}, but it was not found.`);
-            }
+            await runQuery(db, 'DELETE FROM stock_entries WHERE id = ?', [id]);
             return { success: true };
         } catch(e: any) {
             console.error(`Failed to delete stock entry with id ${id}`, e);
@@ -2681,14 +2630,14 @@ export async function getDailyConsumptionReportData({ year, month, lubricantType
             const yearStartDate = dayjs(`${year}-01-01`).startOf('year');
             const yearInitialStock = (initialStocks as Record<string, any>)[year.toString()]?.[lubricantType] || 0;
 
-            const consumptionsBeforeMonth = await db.all(
+            const consumptionsBeforeMonth = await getQuery(db,
                 `SELECT date_iso, "${lubricantType}" as qty FROM consolide WHERE substr(date_iso, 1, 4) = ? AND "${lubricantType}" IS NOT NULL`,
                 [year.toString()]
-            );
-            const entriesBeforeMonth = await db.all(
+            ) as any[];
+            const entriesBeforeMonth = await getQuery(db,
                 'SELECT date, quantity FROM stock_entries WHERE lubricant_type = ? AND substr(date, 1, 4) = ?',
                 [lubricantType, year.toString()]
-            );
+            ) as any[];
             
             monthInitialStock = yearInitialStock;
 
@@ -2708,14 +2657,14 @@ export async function getDailyConsumptionReportData({ year, month, lubricantType
         }
         
         // Get movements for the current month
-        const consumptionsInMonth = await db.all(
+        const consumptionsInMonth = await getQuery(db,
              `SELECT date, "${lubricantType}" as qty FROM consolide WHERE substr(date_iso, 1, 4) = ? AND substr(date_iso, 6, 2) = ? AND "${lubricantType}" IS NOT NULL`,
             [year.toString(), month.toString().padStart(2, '0')]
-        );
-        const entriesInMonth = await db.all(
+        ) as any[];
+        const entriesInMonth = await getQuery(db,
             'SELECT date, quantity FROM stock_entries WHERE lubricant_type = ? AND substr(date, 1, 4) = ? AND substr(date, 6, 2) = ?',
             [lubricantType, year.toString(), month.toString().padStart(2, '0')]
-        );
+        ) as any[];
 
         const daysInMonth = reportMonthStartDate.daysInMonth();
         const dailyData: DailyReportData['dailyData'] = [];
@@ -2774,8 +2723,14 @@ export async function getMonthlyStockReportData(params: {
         // 1. Calculate stock at the beginning of the start period
         let overallInitialStock = (initialStocks as Record<string, any>)[startYear.toString()]?.[lubricantType] || 0;
         
-        const consumptionsBeforePeriod = await db.all(`SELECT date_iso, "${lubricantType}" as qty FROM consolide WHERE substr(date_iso, 1, 4) = ? AND "${lubricantType}" IS NOT NULL`, [startYear.toString()]);
-        const entriesBeforePeriod = await db.all('SELECT date, quantity FROM stock_entries WHERE lubricant_type = ? AND substr(date, 1, 4) = ?', [lubricantType, startYear.toString()]);
+        const consumptionsBeforePeriod = await getQuery(db,
+            `SELECT date_iso, "${lubricantType}" as qty FROM consolide WHERE substr(date_iso, 1, 4) = ? AND "${lubricantType}" IS NOT NULL`, 
+            [startYear.toString()]
+        ) as any[];
+        const entriesBeforePeriod = await getQuery(db,
+            'SELECT date, quantity FROM stock_entries WHERE lubricant_type = ? AND substr(date, 1, 4) = ?', 
+            [lubricantType, startYear.toString()]
+        ) as any[];
 
         consumptionsBeforePeriod.forEach(row => {
             const date = dayjs(row.date_iso, 'YYYY-MM-DD');
@@ -2791,8 +2746,13 @@ export async function getMonthlyStockReportData(params: {
         });
 
         // 2. Get all relevant movements for the entire period
-        const allConsumptions = await db.all(`SELECT date_iso, "${lubricantType}" as qty FROM consolide WHERE "${lubricantType}" IS NOT NULL`);
-        const allEntries = await db.all('SELECT date, quantity FROM stock_entries WHERE lubricant_type = ?', [lubricantType]);
+        const allConsumptions = await getQuery(db,
+            `SELECT date_iso, "${lubricantType}" as qty FROM consolide WHERE "${lubricantType}" IS NOT NULL`
+        ) as any[];
+        const allEntries = await getQuery(db,
+            'SELECT date, quantity FROM stock_entries WHERE lubricant_type = ?', 
+            [lubricantType]
+        ) as any[];
 
         // 3. Loop through each month in the period and calculate
         const reportData: MonthlyStockReportData['reportData'] = [];
@@ -2843,11 +2803,8 @@ export async function getMonthlyStockReportData(params: {
 
 export async function deleteOperationFromDb(id: number) {
   return withDb(async (db) => {
-    await db.run('DELETE FROM declarations WHERE operation_id = ?', [id]);
-    const result = await db.run('DELETE FROM suivi_curatif WHERE id = ?', [id]);
-    if (result.changes === 0) {
-      console.warn(`Attempted to delete operation with id ${id}, but it was not found.`);
-    }
+    await runQuery(db, 'DELETE FROM declarations WHERE operation_id = ?', [id]);
+    await runQuery(db, 'DELETE FROM suivi_curatif WHERE id = ?', [id]);
     return { success: true };
   });
 }
@@ -2872,10 +2829,7 @@ export async function updateOperationInDb(id: number, data: any) {
     
     const values = [...columns.map(col => fullData[col] ?? null), id];
 
-    const result = await db.run(sql, values);
-    if (result.changes === 0) {
-      throw new Error(`Operation with id ${id} not found.`);
-    }
+    await runQuery(db, sql, values);
 
     return { success: true };
   });
@@ -2883,12 +2837,12 @@ export async function updateOperationInDb(id: number, data: any) {
 
 export async function getConsumptionById(id: number) {
   return withDb(async (db) => {
-    const row = await db.get(`
+    const row = await getOne(db, `
         SELECT c.*, m.designation as designation_matrice, m.qte_vidange 
         FROM consolide c
         LEFT JOIN matrice m ON c.matricule = m.matricule
         WHERE c.id = ?
-    `, [id]);
+    `, [id]) as any;
     
     if (row) {
         row.designation = row.designation_matrice || row.designation;
@@ -2915,21 +2869,17 @@ export async function updateConsumption(id: number, data: any) {
     const values = columnsToUpdate.map(col => payload[col] ?? null);
 
     const sql = `UPDATE consolide SET ${setClause} WHERE id = ?`;
-    const result = await db.run(sql, [...values, id]);
+    await runQuery(db, sql, [...values, id]);
     
     // History cache is not updated automatically, user should regenerate
     
-    return { success: true, changes: result.changes };
+    return { success: true };
   });
 }
 
 export async function deleteConsumption(id: number) {
   return withDb(async (db) => {
-    const result = await db.run('DELETE FROM consolide WHERE id = ?', [id]);
-    if (result.changes === 0) {
-      throw new Error(`Consumption with id ${id} not found.`);
-    }
-    // History cache is not updated automatically, user should regenerate
+    await runQuery(db, 'DELETE FROM consolide WHERE id = ?', [id]);
     return { success: true };
   });
 }
@@ -2937,7 +2887,7 @@ export async function deleteConsumption(id: number) {
 export async function saveBonDeSortie(data: any) {
     return withDb(async (db) => {
     const { date, destinataire_chantier, items, ...rest } = data;
-    const result = await db.run(
+    const result = await runQuery(db,
         `INSERT INTO bons_de_sortie (date, destinataire_chantier, items_json, generated_at, destinataire_code, transporteur_nom, transporteur_immatriculation)
         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -2950,16 +2900,16 @@ export async function saveBonDeSortie(data: any) {
         rest.transporteur_immatriculation || null
         ]
     );
-    return { id: result.lastID };
+    return { id: Number((result as any).lastInsertRowid) };
     });
 }
 
 export async function getBonsDeSortieList() {
     return withDb(async (db) => {
     try {
-        return await db.all('SELECT id, date, destinataire_chantier, generated_at FROM bons_de_sortie ORDER BY generated_at DESC');
+        return await getQuery(db, 'SELECT id, date, destinataire_chantier, generated_at FROM bons_de_sortie ORDER BY generated_at DESC') as any[];
     } catch (e: any) {
-        if (e.code === 'SQLITE_ERROR' && e.message.includes('no such table')) return [];
+        if (e.message?.includes('no such table')) return [];
         throw e;
     }
     });
@@ -2967,7 +2917,7 @@ export async function getBonsDeSortieList() {
 
 export async function getBonDeSortieById(id: number): Promise<BonDeSortie | null> {
     return withDb(async (db) => {
-    const row = await db.get('SELECT * FROM bons_de_sortie WHERE id = ?', [id]);
+    const row = await getOne(db, 'SELECT * FROM bons_de_sortie WHERE id = ?', [id]) as any;
     if (!row) return null;
     return {
         ...row,
@@ -2980,7 +2930,7 @@ export async function getBonDeSortieById(id: number): Promise<BonDeSortie | null
 export async function updateBonDeSortie(id: number, data: any) {
     return withDb(async (db) => {
     const { date, destinataire_chantier, items, ...rest } = data;
-    const result = await db.run(
+    await runQuery(db,
         `UPDATE bons_de_sortie SET
         date = ?, destinataire_chantier = ?, items_json = ?,
         destinataire_code = ?, transporteur_nom = ?, transporteur_immatriculation = ?
@@ -2995,15 +2945,13 @@ export async function updateBonDeSortie(id: number, data: any) {
         id
         ]
     );
-    if (result.changes === 0) throw new Error('Bon de sortie not found.');
     return { success: true };
     });
 }
 
 export async function deleteBonDeSortie(id: number) {
     return withDb(async (db) => {
-    const result = await db.run('DELETE FROM bons_de_sortie WHERE id = ?', [id]);
-    if (result.changes === 0) throw new Error('Bon de sortie not found.');
+    await runQuery(db, 'DELETE FROM bons_de_sortie WHERE id = ?', [id]);
     return { success: true };
     });
 }
@@ -3022,7 +2970,6 @@ const parseCsvFromString = async (csvData: string): Promise<any[]> => {
       .on('error', (error) => reject(error));
   });
 };
-
 
 export async function reinitializeTableFromCsv(tableName: string, csvData: string): Promise<{ message: string }> {
     const ALLOWED_TABLES = ['matrice', 'consolide', 'suivi_curatif', 'vidange', 'Param'];
@@ -3047,60 +2994,50 @@ export async function reinitializeTableFromCsv(tableName: string, csvData: strin
             throw new Error(`Impossible de déterminer les en-têtes pour ${tableName} depuis le CSV.`);
         }
         
-        try {
-            await db.exec('BEGIN TRANSACTION');
+        // Drop existing table
+        await runQuery(db, `DROP TABLE IF EXISTS "${tableName}"`);
+        
+        // Recreate table
+        const needsDateIso = ['suivi_curatif', 'consolide', 'vidange'].includes(tableName);
+        const createColumns = headers.map(h => `"${h}" TEXT`).join(', ');
+        const finalCreateColumns = needsDateIso ? `${createColumns}, "date_iso" TEXT` : createColumns;
+        await runQuery(db, `CREATE TABLE "${tableName}" (id INTEGER PRIMARY KEY AUTOINCREMENT, ${finalCreateColumns})`);
 
-            // Drop existing table
-            await db.exec(`DROP TABLE IF EXISTS "${tableName}"`);
-            
-            // Recreate table
-            const needsDateIso = ['suivi_curatif', 'consolide', 'vidange'].includes(tableName);
-            const createColumns = headers.map(h => `"${h}" TEXT`).join(', ');
-            const finalCreateColumns = needsDateIso ? `${createColumns}, "date_iso" TEXT` : createColumns;
-            await db.exec(`CREATE TABLE "${tableName}" (id INTEGER PRIMARY KEY AUTOINCREMENT, ${finalCreateColumns})`);
-
-            // Insert new data
-            const insertHeaders = needsDateIso ? [...headers, 'date_iso'] : headers;
-            const insertPlaceholders = insertHeaders.map(() => '?').join(', ');
-            const insertSql = `INSERT INTO "${tableName}" (${insertHeaders.map(h => `"${h}"`).join(', ')}) VALUES (${insertPlaceholders})`;
-            
-            const stmt = await db.prepare(insertSql);
-            for (const row of rows) {
-                const values = headers.map(h => row[h] ?? null);
-                if (needsDateIso) {
-                    const dateColName = tableName === 'suivi_curatif' ? 'date_entree' : 'date';
-                    const dateVal = row[dateColName];
-                    const isoDate = dateVal ? dayjs(dateVal, 'DD/MM/YYYY').format('YYYY-MM-DD') : null;
-                    values.push(isoDate);
-                }
-                await stmt.run(values);
+        // Insert new data
+        const insertHeaders = needsDateIso ? [...headers, 'date_iso'] : headers;
+        const statements = rows.map(row => {
+            const values = headers.map(h => row[h] ?? null);
+            if (needsDateIso) {
+                const dateColName = tableName === 'suivi_curatif' ? 'date_entree' : 'date';
+                const dateVal = row[dateColName];
+                const isoDate = dateVal ? dayjs(dateVal, 'DD/MM/YYYY').format('YYYY-MM-DD') : null;
+                values.push(isoDate);
             }
-            await stmt.finalize();
+            return {
+                sql: `INSERT INTO "${tableName}" (${insertHeaders.map(h => `"${h}"`).join(', ')}) VALUES (${insertHeaders.map(() => '?').join(', ')})`,
+                args: values
+            };
+        });
 
-            await db.exec('COMMIT');
+        await db.batch(statements);
 
-            // Special case for matrice change: need to clear caches
-            if (tableName === 'matrice' || tableName === 'Param') {
-                await db.run('DELETE FROM planning_cache');
-                await db.run('DELETE FROM history_cache');
-            }
-
-            return { message: `Table '${tableName}' mise à jour avec succès avec ${rows.length} lignes.` };
-        } catch (dbError: any) {
-            await db.exec('ROLLBACK');
-            console.error(`DB Error for ${tableName} during reinitialization:`, dbError);
-            throw new Error(`Échec de la mise à jour de la table ${tableName}: ${dbError.message}`);
+        // Special case for matrice change: need to clear caches
+        if (tableName === 'matrice' || tableName === 'Param') {
+            await runQuery(db, 'DELETE FROM planning_cache');
+            await runQuery(db, 'DELETE FROM history_cache');
         }
+
+        return { message: `Table '${tableName}' mise à jour avec succès avec ${rows.length} lignes.` };
     });
 }
 
 export async function getLastStockEntryDate(lubricantType: string): Promise<string | null> {
     return withDb(async (db) => {
         try {
-            const row = await db.get(
+            const row = await getOne(db,
                 'SELECT date FROM stock_entries WHERE lubricant_type = ? ORDER BY date DESC LIMIT 1',
                 [lubricantType]
-            );
+            ) as any;
             return row ? dayjs(row.date, 'YYYY-MM-DD').format('DD/MM/YYYY') : null;
         } catch (e: any) {
             console.error(`Failed to get last entry date for ${lubricantType}`, e);
@@ -3109,43 +3046,11 @@ export async function getLastStockEntryDate(lubricantType: string): Promise<stri
     });
 }
 
-
-// Fonction de test à ajouter en bas du fichier
+// Fonction de test
 export async function testEcritureDisque() {
-    const testFilePath = '/data/test_ecriture.txt';
-    const timestamp = new Date().toISOString();
-    
-    try {
-        // 1. Écrire un fichier simple
-        await fs.writeFile(testFilePath, timestamp);
-        
-        // 2. Lire ce fichier tout de suite
-        const content = await fs.readFile(testFilePath, 'utf-8');
-        
-        // 3. Vérifier le dossier
-        const files = await fs.readdir('/data');
-        
-        return { 
-            success: true, 
-            message: `Écriture réussie ! Contenu: ${content}. Fichiers dans /data: ${JSON.stringify(files)}` 
-        };
-    } catch (e: any) {
-        return { success: false, error: e.message };
-    }
+    // Cette fonction ne fonctionnera pas sur Cloudflare car le filesystem n'est pas accessible
+    return { 
+        success: false, 
+        error: "Cette fonction n'est pas disponible sur Cloudflare. Utilisez la base de données Turso/D1 pour stocker les données." 
+    };
 }
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-

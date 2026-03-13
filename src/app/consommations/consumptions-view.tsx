@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useTransition }from 'react';
+import { useState, useTransition } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Search, Loader2, CalendarIcon } from 'lucide-react';
+import { Search, Loader2, CalendarIcon, Droplet } from 'lucide-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/fr';
 import { useToast } from '@/hooks/use-toast';
@@ -11,21 +11,11 @@ import { getConsumptionsByDateRange } from '@/lib/actions/maintenance-actions';
 import { ConsommationsDataTable } from './data-table';
 import { StockSummaryTable } from './stock-summary-table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Droplet } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 
 dayjs.locale('fr');
-
-type ConsumptionData = {
-    consumptions: any[];
-    summary: {
-        consumed: Record<string, number>;
-        entries: Record<string, number>;
-    };
-    initialStock: Record<string, number>;
-};
 
 export function ConsumptionsView() {
     const [isPending, startTransition] = useTransition();
@@ -34,7 +24,7 @@ export function ConsumptionsView() {
         from: dayjs().subtract(30, 'day').toDate(),
         to: new Date()
     });
-    const [data, setData] = useState<ConsumptionData | null>(null);
+    const [data, setData] = useState<any | null>(null);
 
     const handleSearch = () => {
         if (!dateRange.from || !dateRange.to) {
@@ -44,15 +34,11 @@ export function ConsumptionsView() {
 
         startTransition(async () => {
             const result = await getConsumptionsByDateRange(dateRange.from as Date, dateRange.to as Date);
-            if (result.success) {
-                setData({
-                    consumptions: result.consumptions || [],
-                    summary: result.summary || { consumed: {}, entries: {} },
-                    initialStock: result.initialStockSummary || {}
-                });
-                toast({ title: 'Recherche terminée', description: `${result.consumptions?.length || 0} enregistrements trouvés.`});
+            if (result.success && result.data) {
+                setData(result.data);
+                toast({ title: 'Recherche terminée', description: `${result.data.consumptions?.length || 0} enregistrements trouvés.`});
             } else {
-                toast({ variant: 'destructive', title: 'Erreur', description: result.message });
+                toast({ variant: 'destructive', title: 'Erreur', description: result.message || "Erreur de chargement" });
                 setData(null);
             }
         });
@@ -60,7 +46,7 @@ export function ConsumptionsView() {
 
     return (
         <div className="space-y-6">
-            <Card>
+            <Card className="print-hide">
                 <CardHeader>
                     <CardTitle>Sélectionner une période</CardTitle>
                     <CardDescription>Choisissez une plage de dates pour analyser les consommations et gérer les stocks.</CardDescription>
@@ -134,7 +120,7 @@ export function ConsumptionsView() {
             
             {data && (
                 <div className="space-y-6">
-                    <StockSummaryTable summary={data.summary} initialStock={data.initialStock} />
+                    <StockSummaryTable summary={data.summary} initialStock={data.initialStockSummary} />
                     
                     <Card>
                     <CardHeader>
@@ -144,7 +130,7 @@ export function ConsumptionsView() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {data.consumptions.length > 0 ? (
+                        {data.consumptions && data.consumptions.length > 0 ? (
                         <ConsommationsDataTable data={data.consumptions} />
                         ) : (
                         <Alert variant="default" className="bg-amber-50 border-amber-200">

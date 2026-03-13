@@ -130,42 +130,42 @@ export function EquipmentForm({ initialData }: Props) {
               <FormField control={form.control} name="matricule" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Matricule</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
+                  <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}/>
                <FormField control={form.control} name="designation" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Désignation</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
+                  <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}/>
                <FormField control={form.control} name="marque" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Marque</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
+                  <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}/>
                <FormField control={form.control} name="categorie" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Catégorie</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
+                  <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}/>
                <FormField control={form.control} name="annee" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Année de mise en service</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
+                  <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}/>
               <FormField control={form.control} name="qte_vidange" render={({ field }) => (
                 <FormItem>
                     <FormLabel>Qté Vidange (L)</FormLabel>
-                    <FormControl><Input type="number" {...field} /></FormControl>
+                    <FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl>
                     <FormDescription>Quantité d'huile pour une vidange complète.</FormDescription>
                     <FormMessage />
                 </FormItem>
@@ -173,7 +173,7 @@ export function EquipmentForm({ initialData }: Props) {
               <FormField control={form.control} name="pneumatique" render={({ field }) => (
                 <FormItem>
                     <FormLabel>Pneumatique</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                     <FormDescription>Type ou dimensions des pneus.</FormDescription>
                     <FormMessage />
                 </FormItem>
@@ -181,7 +181,7 @@ export function EquipmentForm({ initialData }: Props) {
               <FormField control={form.control} name="code_barre" render={({ field }) => (
                 <FormItem>
                     <FormLabel>Code Barre</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormControl><Input {...field} value={field.value ?? ''} /></FormControl>
                     <FormDescription>Code barre ou autre identifiant interne.</FormDescription>
                     <FormMessage />
                 </FormItem>

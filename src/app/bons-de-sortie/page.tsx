@@ -4,11 +4,12 @@ import { Button } from '@/components/ui/button';
 import { FilePlus2 } from 'lucide-react';
 import { getBonsDeSortieListAction } from '@/lib/actions/maintenance-actions';
 import { BonsListTable } from './bons-list-table';
-
+import type { BonListItem } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+
 export default async function BonsDeSortieListPage() {
-  const bons = await getBonsDeSortieListAction();
+  const bons: BonListItem[] = await getBonsDeSortieListAction() as BonListItem[];
 
   return (
     <div className="flex flex-col gap-8">

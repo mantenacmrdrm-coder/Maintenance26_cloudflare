@@ -34,7 +34,7 @@ export default async function EquipmentDetailPage({ params }: Props) {
   }
 
   // --- Construct a comprehensive `operations` list ---
-  const preventativeOperations: Operation[] = Object.values(preventativeHistory)
+  const preventativeOperations: Operation[] = Object.values(preventativeHistory as Record<string, PreventativeMaintenanceEntry[]>)
     .flat()
     .map((entry, index) => ({
       id: -1 * (index + 1), // Generate a unique negative ID to avoid clashes with curative IDs
@@ -46,7 +46,7 @@ export default async function EquipmentDetailPage({ params }: Props) {
       niveau: 'Préventif',
     }));
 
-  const curativeOperations: Operation[] = curativeHistory.map(entry => ({
+  const curativeOperations: Operation[] = (curativeHistory as CurativeMaintenanceEntry[]).map(entry => ({
     id: entry.id, // Use the existing unique ID
     matricule: matricule,
     operation: entry.panneDeclaree,
@@ -63,7 +63,7 @@ export default async function EquipmentDetailPage({ params }: Props) {
 
   return (
     <EquipmentDetailClientView
-      equipment={equipment as Equipment}
+      equipment={equipment as unknown as Equipment}
       operations={operations}
       preventativeHistory={preventativeHistory as Record<string, PreventativeMaintenanceEntry[]>}
       curativeHistory={curativeHistory as CurativeMaintenanceEntry[]}

@@ -29,7 +29,6 @@ export function FicheView({ data }: FicheViewProps) {
 
   return (
       <div className="bg-white p-2.5 rounded-none text-black w-full max-w-4xl mx-auto font-sans">
-        {/* === EN-TÊTE IMAGE SEULE (pas de texte supplémentaire) === */}
         <div className="border-b-2 border-black mb-2">
           <img 
             src="/templates/en-tete-officiel.png" 
@@ -38,7 +37,6 @@ export function FicheView({ data }: FicheViewProps) {
           />
         </div>
 
-      {/* === TITRE + N° === */}
       <div className="bg-gray-300 py-1 px-2 text-center mb-2">
         <div className="font-bold text-base uppercase tracking-wider">Fiche de maintenance curative</div>
       </div>
@@ -46,49 +44,40 @@ export function FicheView({ data }: FicheViewProps) {
         N°........../{data.date_entree.slice(-4)}
       </div>
 
-      {/* === CORPS — taille augmentée à text-[9px], valeurs en gras === */}
       <div className="space-y-1.5 text-[9px]">
-        {/* Ligne 1: Date */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Date :</div>
           <div className="flex-1 text-center font-bold">{data.date_entree}</div>
         </div>
 
-        {/* Ligne 2: Atelier */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Atelier/ Service/ lieu d’affectation :</div>
           <div className="flex-1 text-center font-bold">{data.affectation}</div>
         </div>
 
-        {/* Ligne 3: Désignation matériel */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Désignation matériel :</div>
           <div className="flex-1 text-center font-bold">{data.designation}</div>
         </div>
 
-        {/* Ligne 4: Code de matériel */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Code de matériel :</div>
           <div className="flex-1 text-center font-bold">{data.matricule}</div>
         </div>
 
-        {/* Ligne 5: Marque */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Marque :</div>
           <div className="flex-1 text-center font-bold">{data.marque}</div>
         </div>
 
-        {/* Ligne 6: Type */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Type :</div>
           <div className="flex-1 text-center font-bold">{data.categorie}</div>
         </div>
 
-        {/* ✅ LIGNE 7–8: Nature de l’intervention — CORRECTION FINALE (X centrés sous libellés) */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Nature de l’intervention</div>
           <div className="flex-1">
-            {/* Libellés en haut — 3 colonnes égales, sans gap, bordure basse */}
             <div className="flex w-full">
               <div className="flex-1 flex flex-col items-center">
                 <div className="pb-0.5 mb-1 text-center">électrique</div>
@@ -112,19 +101,16 @@ export function FicheView({ data }: FicheViewProps) {
           </div>
         </div>
 
-        {/* Ligne 9: Diagnostic */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Diagnostic :</div>
           <div className="flex-1 text-center font-bold"></div>
         </div>
 
-        {/* Ligne 10: Anomalies constatées — libellé + valeur sur même ligne, valeur en gras, alignée à gauche */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Anomalies constatées :</div>
           <div className="flex-1 text-left font-bold">{data.panne_declaree}</div>
         </div>
 
-        {/* Ligne 11: Cause — libellé seul, puis 4 lignes indentées */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Cause :</div>
           <div className="flex-1"></div>
@@ -136,7 +122,6 @@ export function FicheView({ data }: FicheViewProps) {
           <div>4-</div>
         </div>
 
-        {/* Ligne 12: Travail à exécuter — libellé seul, puis 4 lignes indentées */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Travail à exécuter :</div>
           <div className="flex-1"></div>
@@ -156,7 +141,6 @@ export function FicheView({ data }: FicheViewProps) {
           )}
         </div>
 
-        {/* Ligne 13: Intervention + Travaux réalisés */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Intervention :</div>
           <div className="flex-1"></div>
@@ -170,7 +154,6 @@ export function FicheView({ data }: FicheViewProps) {
           </div>
         </div>
 
-        {/* Ligne 14: Résultat des essais — reste comme avant (grille 4 colonnes) */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Résultat des essais après réparation</div>
           <div className="flex-1">
@@ -186,7 +169,6 @@ export function FicheView({ data }: FicheViewProps) {
           </div>
         </div>
 
-        {/* Ligne 15: Heures d’arrêt */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Heures d’arrêt machine :</div>
           <div className="grid grid-cols-2 gap-2">
@@ -195,7 +177,6 @@ export function FicheView({ data }: FicheViewProps) {
           </div>
         </div>
 
-        {/* Ligne 16: Intervenants */}
         <div className="flex">
           <div className="w-[160px] text-left font-semibold whitespace-nowrap">Nom des intervenants :</div>
           <div className="grid grid-cols-1 gap-2"></div>
@@ -203,7 +184,6 @@ export function FicheView({ data }: FicheViewProps) {
         </div>
       </div>
 
-      {/* === PIED DE PAGE === */}
       <div className="mt-12 pt-2 border-t-2 border-black">
           <div className="grid grid-cols-2 gap-4 text-center text-xs font-bold uppercase">
               <div>Visa du chargé de maintenance</div>

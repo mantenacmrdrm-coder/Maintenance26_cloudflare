@@ -26,21 +26,28 @@ export function ParametersTable({ data, headers }: Props) {
 
     const { opCol, intervalCols, levelCols, visibleHeaders } = useMemo(() => {
         const intervalCols = ['7', '30', '90', '180', '360'];
-        const levelColNames: string[] = [];
         
-        const levelCols: { name: string, level: 'C'|'N'|'CH' }[] = [
-            { name: headers.find(h => h.toLowerCase().includes('contrôler')) || '', level: 'C' },
-            { name: headers.find(h => h.toLowerCase().includes('nettoyage')) || '', level: 'N' },
-            { name: headers.find(h => h.toLowerCase().includes('changement')) || '', level: 'CH' },
-        ].filter(c => c.name).map(c => {
-            levelColNames.push(c.name);
-            return c;
-        });
+        const levelMapping: { keyword: string; level: 'C' | 'N' | 'CH' }[] = [
+            { keyword: 'contrôler', level: 'C' },
+            { keyword: 'nettoyage', level: 'N' },
+            { keyword: 'changement', level: 'CH' },
+        ];
+
+        const levelCols: { name: string; level: 'C' | 'N' | 'CH' }[] = [];
+        const levelColNames: string[] = [];
+
+        for (const mapping of levelMapping) {
+            const foundHeader = headers.find(h => h.toLowerCase().includes(mapping.keyword));
+            if (foundHeader) {
+                levelCols.push({ name: foundHeader, level: mapping.level });
+                levelColNames.push(foundHeader);
+            }
+        }
 
         const knownCols = new Set(['id', ...intervalCols, ...levelColNames]);
         const opCol = headers.find(h => !knownCols.has(h)) || 'id';
 
-        const visibleHeaders = [opCol, ...intervalCols, ...levelCols.map(l => l.name)];
+        const visibleHeaders = [opCol, ...intervalCols, ...levelColNames];
         
         return { opCol, intervalCols, levelCols, visibleHeaders };
     }, [headers]);

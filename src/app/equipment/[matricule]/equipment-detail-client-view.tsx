@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef } from 'react';
@@ -13,7 +14,7 @@ import Image from 'next/image';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { EquipmentImages } from '@/lib/equipment-images';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import  PreventativeMaintenanceHistory  from '@/app/equipment/[matricule]/preventative-maintenance-history';
+import { PreventativeMaintenanceHistory } from '@/app/equipment/[matricule]/preventative-maintenance-history';
 import { CurativeMaintenanceHistory } from './curative-maintenance-history';
 import { Wrench, Zap, SlidersHorizontal, GaugeCircle, Droplet, Filter, Power, PowerOff, Upload, Printer } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
@@ -74,7 +75,7 @@ export function EquipmentDetailClientView({ equipment, operations, preventativeH
         }
         return PlaceHolderImages.find(img => img.id === 'equipment-generic');
     };
-    return specificImage || getPlaceholderImage(equipment.categorie) || PlaceHolderImages.find(img => img.id === 'equipment-generic');
+    return specificImage || getPlaceholderImage(equipment.categorie || undefined) || PlaceHolderImages.find(img => img.id === 'equipment-generic');
   }
 
   const [currentImage, setCurrentImage] = useState(getInitialImage());
@@ -139,11 +140,11 @@ export function EquipmentDetailClientView({ equipment, operations, preventativeH
       return entries[0]; // Already sorted descending by date
   };
 
-  const findLatestCounterAndDate = (history: Record<string, PreventativeMaintenanceEntry[]>) => {
+  const findLatestCounterAndDate = (history: Record<string, PreventativeMaintenanceEntry[]>): { counter: string | null; date: string | null } => {
       let latestEntry: PreventativeMaintenanceEntry | null = null;
       let latestDateObj: Date | null = null;
 
-      Object.values(history).flat().forEach(entry => {
+      for (const entry of Object.values(history).flat()) {
           const entryDate = parse(entry.date, 'dd/MM/yyyy', new Date());
           if (!isNaN(entryDate.getTime())) {
             if (!latestDateObj || entryDate > latestDateObj) {
@@ -151,7 +152,7 @@ export function EquipmentDetailClientView({ equipment, operations, preventativeH
                 latestEntry = entry;
             }
           }
-      });
+      }
       
       if (latestEntry) {
         const counterDetail = latestEntry.details.find(d => d.toLowerCase().includes('relevé compteur'));
@@ -181,9 +182,16 @@ export function EquipmentDetailClientView({ equipment, operations, preventativeH
   // Curative Stats Calculation
   const curativeStats = curativeHistory.reduce((acc, entry) => {
       acc.totalPannes += 1;
-      acc.totalJoursIndisponibilite += entry.dureeIntervention || 0;
+      // Force conversion to number to avoid string concatenation
+      const daysValue = typeof entry.dureeIntervention === 'number' 
+        ? entry.dureeIntervention 
+        : parseFloat(String(entry.dureeIntervention || '0').replace(',', '.'));
+      acc.totalJoursIndisponibilite += isNaN(daysValue) ? 0 : daysValue;
+      
       if (entry.typePanne) {
-        acc.types[entry.typePanne] = (acc.types[entry.typePanne] || 0) + 1;
+        // Use lowercase trim keys for consistency with UI lookup
+        const typeKey = String(entry.typePanne).toLowerCase().trim();
+        acc.types[typeKey] = (acc.types[typeKey] || 0) + 1;
       }
       return acc;
   }, {
@@ -320,7 +328,7 @@ export function EquipmentDetailClientView({ equipment, operations, preventativeH
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between items-center"><span>Total Pannes:</span><span className="font-bold text-lg text-destructive">{curativeStats.totalPannes}</span></div>
-              <div className="flex justify-between items-center"><span>Jours d'indisponibilité:</span><span className="font-bold">{curativeStats.totalJoursIndisponibilite}</span></div>
+              <div className="flex justify-between items-center"><span>Jours d'indisponibilité:</span><span className="font-bold">{curativeStats.totalJoursIndisponibilite} jour(s)</span></div>
               <Separator />
               <div className="flex justify-around items-center pt-1">
                 <div className='text-center'><Wrench className='mx-auto h-4 w-4 mb-1' /><span className='font-bold'>{curativeStats.types['mécanique'] || 0}</span><p className='text-xs text-muted-foreground'>Mécanique</p></div>

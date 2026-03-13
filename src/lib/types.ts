@@ -1,14 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
 export type Equipment = {
   id: number;
   matricule: string;
@@ -19,7 +8,7 @@ export type Equipment = {
   qte_vidange: number | null;
   code_barre: string | null;
   pneumatique: string | null;
-  [key: string]: any; // To allow for dynamic properties
+  [key: string]: any;
 };
 
 export type Operation = {
@@ -31,7 +20,6 @@ export type Operation = {
   intervalle_jours?: number | null;
   nature: string;
   niveau: string;
-  // Fields for export
   date_entree?: string;
   panne_declaree?: string;
   sitactuelle?: string;
@@ -41,30 +29,7 @@ export type Operation = {
   affectation?: string;
   type_de_panne?: string;
   designation?: string;
-};
-
-export type ScheduledOperation = {
-  nature: string;
-  date_programmee: string;
-  [key: string]: any;
-};
-
-export type EquipmentStats = {
-  matricule: string;
-  total_operations: number;
-  operations_realisees: number;
-  operations_en_retard: number;
-  taux_reussite: number;
-  derniere_maj: string;
-};
-
-export type GlobalStats = {
-  total_operations: number;
-  realisees: number;
-  programmees: number;
-  en_retard: number;
-  hors_planning: number;
-  taux_reussite: number;
+  marque?: string | null;
 };
 
 export type Alert = {
@@ -77,29 +42,6 @@ export type Alert = {
   status?: string;
 };
 
-export type PlanningEntry = {
-  matricule: string;
-  entretien: string;
-  date_programmee: string;
-  nature: string;
-  niveau: string;
-  [key: string]: any;
-};
-
-export type PlanningMatrixRow = {
-  [entretien: string]: {
-    date: string;
-    status: 'Programmé' | 'Réalisé' | 'En retard';
-  } | undefined;
-};
-
-export type PlanningMatrix = {
-  headers: readonly string[];
-  rows: {
-    [matricule: string]: PlanningMatrixRow;
-  };
-};
-
 export type PreventativeMaintenanceEntry = {
   id: string;
   operation: string;
@@ -110,7 +52,7 @@ export type PreventativeMaintenanceEntry = {
 export type CurativeMaintenanceEntry = {
   id: number;
   panneDeclaree: string;
-  typePanne: 'mécanique' | 'électrique' | 'autres' | 'non spécifié';
+  typePanne: 'mécanique' | 'électrique' | 'hydraulique' | 'autres' | 'non spécifié';
   dateEntree: string;
   dateSortie: string;
   dureeIntervention: number | null;
@@ -195,10 +137,8 @@ export type DeclarationPanne = {
   id: number;
   operation_id: number;
   generated_at: string;
-  
   operation: Operation;
   equipment: Equipment;
-
   chauffeur_conducteur: string;
   diagnostique_intervenant: string;
   causes: string;
@@ -294,7 +234,7 @@ export type DailyReportData = {
 
 export type MonthlyStockReportData = {
     reportData: {
-        month: string; // e.g., 'Janvier 2026'
+        month: string;
         initialStock: number;
         entries: number;
         sorties: number;
@@ -305,7 +245,7 @@ export type MonthlyStockReportData = {
     overallInitialStock: number;
     overallFinalStock: number;
     lubricantType: string;
-    period: string; // e.g., 'Janvier 2026 au Décembre 2026'
+    period: string;
 };
 
 export type BonDeSortieItem = {
@@ -326,4 +266,32 @@ export type BonDeSortie = {
   transporteur_nom: string | null;
   transporteur_immatriculation: string | null;
   items: BonDeSortieItem[];
+};
+
+export type BonListItem = {
+    id: number;
+    generated_at: string;
+    date: string;
+    destinataire_chantier: string;
+};
+
+export type DeclarationListItem = {
+    id: number;
+    generated_at: string;
+    matricule: string;
+    panne_declaree: string;
+    designation: string;
+};
+
+export type ActionResponse<T = any> = 
+  | { success: true; data: T; message?: string }
+  | { success: false; message: string; data?: never };
+
+export type ConsumptionQueryResult = {
+    consumptions: any[];
+    summary: {
+        consumed: Record<string, number>;
+        entries: Record<string, number>;
+    };
+    initialStockSummary: Record<string, number>;
 };

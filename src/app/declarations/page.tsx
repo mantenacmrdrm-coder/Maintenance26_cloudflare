@@ -1,20 +1,15 @@
 import Link from 'next/link';
-
-export const dynamic = 'force-dynamic';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FilePlus2 } from 'lucide-react';
 import { getDeclarationsListAction } from '@/lib/actions/maintenance-actions';
 import { DeclarationsListTable } from './declarations-list-table';
+import type { DeclarationListItem } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 export default async function DeclarationsListPage() {
-  const declarations = await getDeclarationsListAction();
+  const declarations: DeclarationListItem[] = await getDeclarationsListAction() as DeclarationListItem[];
 
   return (
     <div className="flex flex-col gap-8">

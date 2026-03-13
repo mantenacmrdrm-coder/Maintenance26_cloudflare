@@ -10,15 +10,9 @@ import 'dayjs/locale/fr';
 import { DeleteBonButton } from './delete-bon-button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import type { BonListItem } from '@/lib/types';
 
 dayjs.locale('fr');
-
-type BonListItem = {
-    id: number;
-    generated_at: string;
-    date: string;
-    destinataire_chantier: string;
-}
 
 export function BonsListTable({ bons }: { bons: BonListItem[] }) {
   const [filter, setFilter] = useState('');

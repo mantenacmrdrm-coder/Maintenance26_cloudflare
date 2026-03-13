@@ -26,8 +26,16 @@ import { DeleteReportButton } from './delete-report-button';
 
 dayjs.locale('fr');
 
+// Define a type for the report object
+type Report = {
+  id: number;
+  start_date: string;
+  end_date: string;
+  generated_at: string;
+};
+
 export default async function ReportsPage() {
-  const reports = await getWeeklyReports();
+  const reports: any[] = await getWeeklyReports();
 
   return (
     <div className="flex flex-col gap-8">

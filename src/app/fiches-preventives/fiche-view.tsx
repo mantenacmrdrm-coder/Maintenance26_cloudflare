@@ -7,7 +7,7 @@ import Image from 'next/image';
 export function FichePreventiveView({ data }: { data: PreventiveFicheData }) {
   const { equipment, entretien, travaux, filtrations, observation } = data;
   
-  const Td = ({ children, className = '', ...props }: { children: React.ReactNode, className?: string } & React.TdHTMLAttributes<HTMLTableCellElement>) => (
+  const Td = ({ children, className = '', ...props }: { children?: React.ReactNode, className?: string } & React.TdHTMLAttributes<HTMLTableCellElement>) => (
     <td className={cn("py-0.5 px-1 border border-gray-300 text-center", className)} {...props}>{children}</td>
   );
 
@@ -26,8 +26,6 @@ export function FichePreventiveView({ data }: { data: PreventiveFicheData }) {
   const transmissionTravail = travaux.find(t => t.organe === 'Boite de vitesse');
   const hydrauliqueTravail = travaux.find(t => t.organe === 'Réservoir hydraulique');
   const graissageTravail = travaux.find(t => t.organe === 'Tous les graisseurs');
-
-// ... début du composant ...
 
 return (
   <div className="bg-white p-1.5 rounded-none text-black w-full mx-auto font-sans">
@@ -126,7 +124,7 @@ return (
       <tbody>
         <tr className='h-6'>
           <Td className="p-0.5 text-left">Moteur</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
           <Td className={cn('p-0.5 font-bold', getTravailColor(moteurTravail?.travail))}>{moteurTravail?.travail || ''}</Td>
           <Td className="p-0.5 font-bold">{moteurTravail?.date || ''}</Td>
           <Td className="p-0.5 font-bold">{moteurTravail?.lubrifiant || ''}</Td>
@@ -135,7 +133,7 @@ return (
         
         <tr className='h-6'>
           <Td className="p-0.5 text-left">Boite de vitesse</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
           {transmissionTravail ? (
             <>
               <Td rowSpan={3} className={cn('p-0.5 font-bold', getTravailColor(transmissionTravail.travail))}>{transmissionTravail.travail}</Td>
@@ -145,25 +143,25 @@ return (
             </>
           ) : (
             <>
-              <Td rowSpan={3} className="p-0.5" children={undefined}></Td>
-              <Td rowSpan={3} className="p-0.5" children={undefined}></Td>
-              <Td rowSpan={3} className="p-0.5" children={undefined}></Td>
-              <Td rowSpan={3} className="p-0.5" children={undefined}></Td>
+              <Td rowSpan={3} className="p-0.5" />
+              <Td rowSpan={3} className="p-0.5" />
+              <Td rowSpan={3} className="p-0.5" />
+              <Td rowSpan={3} className="p-0.5" />
             </>
           )}
         </tr>
         <tr className='h-6'>
           <Td className="p-0.5 text-left">Différentiels (ponts)</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
         </tr>
         <tr className='h-6'>
           <Td className="p-0.5 text-left">Réducteurs des roues</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
         </tr>
 
         <tr className='h-6'>
           <Td className="p-0.5 text-left">Réservoir hydraulique</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
           <Td className={cn('p-0.5 font-bold', getTravailColor(hydrauliqueTravail?.travail))}>{hydrauliqueTravail?.travail || ''}</Td>
           <Td className="p-0.5 font-bold">{hydrauliqueTravail?.date || ''}</Td>
           <Td className="p-0.5 font-bold">{hydrauliqueTravail?.lubrifiant || ''}</Td>
@@ -172,7 +170,7 @@ return (
 
         <tr className='h-6'>
           <Td className="p-0.5 text-left">Tous les graisseurs</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
           <Td className={cn('p-0.5 font-bold', getTravailColor(graissageTravail?.travail))}>{graissageTravail?.travail || ''}</Td>
           <Td className="p-0.5 font-bold">{graissageTravail?.date || ''}</Td>
           <Td className="p-0.5 font-bold">{graissageTravail?.lubrifiant || ''}</Td>
@@ -196,37 +194,37 @@ return (
         <tr className='h-6'>
           <Td className="p-0.5 text-left">Filtre à air</Td>
           <Td className="p-0.5 font-bold">{filtrations.air.active ? '1' : ''}</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
           <Td className="p-0.5 font-bold">{filtrations.air.date || ''}</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
         </tr>
         <tr className='h-6'>
           <Td className="p-0.5 text-left">Filtre à huile</Td>
           <Td className="p-0.5 font-bold">{filtrations.huile.active ? '1' : ''}</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
           <Td className="p-0.5 font-bold">{filtrations.huile.date || ''}</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
         </tr>
         <tr className='h-6'>
           <Td className="p-0.5 text-left">Filtre à gasoil</Td>
           <Td className="p-0.5 font-bold">{filtrations.gasoil.active ? '1' : ''}</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
           <Td className="p-0.5 font-bold">{filtrations.gasoil.date || ''}</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
         </tr>
         <tr className='h-6'>
           <Td className="p-0.5 text-left">Filtre à bypass</Td>
           <Td className="p-0.5 font-bold">{filtrations.bypass.active ? '1' : ''}</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
           <Td className="p-0.5 font-bold">{filtrations.bypass.date || ''}</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
         </tr>
         <tr className='h-6'>
           <Td className="p-0.5 text-left">Filtre à hydraulique</Td>
           <Td className="p-0.5 font-bold">{filtrations.hydraulique.active ? '1' : ''}</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
           <Td className="p-0.5 font-bold">{filtrations.hydraulique.date || ''}</Td>
-          <Td className="p-0.5" children={undefined}></Td>
+          <Td className="p-0.5" />
         </tr>
       </tbody>
     </table>

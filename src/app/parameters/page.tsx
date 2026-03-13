@@ -8,10 +8,10 @@ import { Separator } from '@/components/ui/separator';
 
 export const dynamic = 'force-dynamic';
 export default async function ParametersPage() {
-  let params = [];
+  let params: any[] = [];
   let paramsError = null;
 
-  let categoryEntretiens = {};
+  let categoryEntretiens: Record<string, Record<string, boolean>> = {};
   let categories: string[] = [];
   let categoryError = null;
 

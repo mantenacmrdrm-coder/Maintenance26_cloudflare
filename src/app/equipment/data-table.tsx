@@ -30,12 +30,12 @@ export function EquipmentDataTable({ data }: { data: Equipment[] }) {
   const [brandFilter, setBrandFilter] = useState('Toutes');
 
   const categories = useMemo(() => {
-    const cats = new Set(data.map(item => item.categorie).filter(Boolean));
+    const cats = new Set(data.map(item => item.categorie).filter((c): c is string => !!c));
     return ['Toutes', ...Array.from(cats).sort()];
   }, [data]);
 
   const marques = useMemo(() => {
-    const brands = new Set(data.map(item => item.marque).filter(Boolean));
+    const brands = new Set(data.map(item => item.marque).filter((b): b is string => !!b));
     return ['Toutes', ...Array.from(brands).sort()];
   }, [data]);
 

@@ -17,16 +17,9 @@ import 'dayjs/locale/fr';
 import { DeleteDeclarationButton } from './delete-declaration-button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import type { DeclarationListItem } from '@/lib/types';
 
 dayjs.locale('fr');
-
-type DeclarationListItem = {
-    id: number;
-    generated_at: string;
-    matricule: string;
-    panne_declaree: string;
-    designation: string;
-}
 
 export function DeclarationsListTable({ declarations }: { declarations: DeclarationListItem[] }) {
   const [filter, setFilter] = useState('');
